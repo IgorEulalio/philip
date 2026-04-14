@@ -1,0 +1,33 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: philip-file-monitoring
+spec:
+  kprobes:
+    - call: do_sys_openat2
+      syscall: false
+      args:
+        - index: 1
+          type: string
+        - index: 2
+          type: int
+      selectors:
+        - matchArgs:
+            - index: 1
+              operator: Prefix
+              values:
+                # Sensitive paths to monitor
+                - /etc/shadow
+                - /etc/passwd
+                - /etc/ssh
+                - /root/.ssh
+                - /home/runner/.ssh
+                - /proc/self/environ
+                # GitHub Actions specific paths
+                - /home/runner/work/_temp
+                # Common credential paths
+                - /home/runner/.docker/config.json
+                - /home/runner/.npmrc
+                - /home/runner/.pypirc
+                - /home/runner/.aws
+                - /home/runner/.kube

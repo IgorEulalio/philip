@@ -1,0 +1,17 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: philip-process-monitoring
+spec:
+  # Process exec and exit events are built-in to Tetragon —
+  # no TracingPolicy needed. Tetragon exports these by default.
+  # This policy is a placeholder for documentation and future
+  # customization of process filtering.
+  #
+  # Process events captured automatically:
+  #   - process_exec: binary path, args, cwd, parent PID, UID
+  #   - process_exit: exit code, signal, duration
+  #
+  # Philip's agent filters these in userspace to scope to the
+  # CI/CD runner's process tree.
+  kprobes: []

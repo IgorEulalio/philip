@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package philip.v1;
+
+option go_package = "github.com/philip-ai/philip/pkg/proto/philip/v1";
+
+import "philip/v1/events.proto";
+import "google/protobuf/timestamp.proto";
+
+// AgentService is the gRPC service that the backend exposes for agents.
+service AgentService {
+  // SubmitJobEvents sends a complete job event record to the backend.
+  rpc SubmitJobEvents(SubmitJobEventsRequest) returns (SubmitJobEventsResponse);
+
+  // StreamEvents allows the agent to stream events in real-time (for long jobs).
+  rpc StreamEvents(stream StreamEventsRequest) returns (StreamEventsResponse);
+
+  // RegisterAgent registers an agent with the backend on startup.
+  rpc RegisterAgent(RegisterAgentRequest) returns (RegisterAgentResponse);
+
+  // Heartbeat keeps the agent's registration alive.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message SubmitJobEventsRequest {
+  JobEventRecord job_record = 1;
+}
+
+message SubmitJobEventsResponse {
+  bool accepted = 1;
+  string message = 2;
+  // If deviations were detected, return a summary
+  repeated DeviationSummary deviations = 3;
+}
+
+message DeviationSummary {
+  string event_id = 1;
+  string description = 2;
+  float score = 3;
+  string severity = 4; // "low", "medium", "high", "critical"
+}
+
+message StreamEventsRequest {
+  // Agent ID for this stream
+  string agent_id = 1;
+  // Job context
+  JobMetadata metadata = 2;
+  // Batch of events
+  repeated Event events = 3;
+}
+
+message StreamEventsResponse {
+  bool accepted = 1;
+}
+
+message RegisterAgentRequest {
+  string agent_id = 1;
+  string hostname = 2;
+  string version = 3;
+  string os = 4;
+  string kernel_version = 5;
+  string sensor_type = 6; // "tetragon", "native_ebpf"
+  google.protobuf.Timestamp started_at = 7;
+}
+
+message RegisterAgentResponse {
+  bool accepted = 1;
+  string message = 2;
+  // Backend can push configuration to agent
+  AgentConfig config = 3;
+}
+
+message AgentConfig {
+  // Runner process name to track (default: "Runner.Worker")
+  string runner_process_name = 1;
+  // How often to send heartbeats (seconds)
+  int32 heartbeat_interval_seconds = 2;
+  // Maximum events to buffer per job before shipping
+  int32 max_events_per_job = 3;
+  // Event types to collect
+  repeated EventType enabled_event_types = 4;
+}
+
+message HeartbeatRequest {
+  string agent_id = 1;
+  // Current agent status
+  AgentStatus status = 2;
+}
+
+message AgentStatus {
+  int32 active_jobs = 1;
+  int64 events_collected = 2;
+  int64 events_shipped = 3;
+  float cpu_usage_percent = 4;
+  int64 memory_usage_bytes = 5;
+}
+
+message HeartbeatResponse {
+  bool ok = 1;
+  // Updated config if backend needs to change agent behavior
+  AgentConfig updated_config = 2;
+}

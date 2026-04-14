@@ -1,0 +1,33 @@
+[Unit]
+Description=Philip Supply Chain Attack Detector Agent
+Documentation=https://github.com/philip-ai/philip
+After=network.target tetragon.service
+Requires=tetragon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/philip-agent --config /etc/philip/agent.json
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=strict
+ReadWritePaths=/var/run/philip
+ProtectHome=read-only
+
+# Capabilities needed for eBPF (when using native sensor)
+# For Tetragon consumer, no special capabilities needed
+AmbientCapabilities=CAP_BPF CAP_PERFMON
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=philip-agent
+
+# Environment
+Environment=PHILIP_LOG_LEVEL=info
+EnvironmentFile=-/etc/philip/agent.env
+
+[Install]
+WantedBy=multi-user.target

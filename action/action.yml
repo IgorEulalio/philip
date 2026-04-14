@@ -1,0 +1,32 @@
+name: 'Philip Supply Chain Detector'
+description: 'Monitor CI/CD job behavior and detect supply chain attacks'
+author: 'Philip AI'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  mode:
+    description: 'Operating mode: "monitor" (observe only) or "enforce" (fail on detection)'
+    required: false
+    default: 'monitor'
+  socket-path:
+    description: 'Path to the Philip agent unix socket'
+    required: false
+    default: '/var/run/philip/action.sock'
+  timeout:
+    description: 'Timeout in seconds for agent communication'
+    required: false
+    default: '5'
+
+outputs:
+  verdict:
+    description: 'The triage verdict (benign, suspicious, critical)'
+  deviations:
+    description: 'Number of deviations detected'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+  post: 'dist/post.js'

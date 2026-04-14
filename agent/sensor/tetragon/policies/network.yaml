@@ -1,0 +1,18 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: philip-network-monitoring
+spec:
+  kprobes:
+    - call: tcp_connect
+      syscall: false
+      args:
+        - index: 0
+          type: sock
+      selectors: []
+      # Captures all outbound TCP connections with:
+      # - destination IP address
+      # - destination port
+      # - source IP address
+      # - source port
+      # Philip filters in userspace to scope to the runner's process tree.

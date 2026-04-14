@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+package philip.v1;
+
+option go_package = "github.com/philip-ai/philip/pkg/proto/philip/v1";
+
+import "philip/v1/events.proto";
+import "google/protobuf/timestamp.proto";
+
+// PhilipAPI is the REST/gRPC service for dashboards, CLI, and external integrations.
+service PhilipAPI {
+  // Baselines
+  rpc GetBaseline(GetBaselineRequest) returns (GetBaselineResponse);
+  rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
+
+  // Findings
+  rpc GetFinding(GetFindingRequest) returns (Finding);
+  rpc ListFindings(ListFindingsRequest) returns (ListFindingsResponse);
+
+  // Jobs
+  rpc GetJobRecord(GetJobRecordRequest) returns (JobEventRecord);
+  rpc ListJobRecords(ListJobRecordsRequest) returns (ListJobRecordsResponse);
+
+  // Agents
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+}
+
+// --- Baselines ---
+
+message GetBaselineRequest {
+  string repository = 1;
+}
+
+message GetBaselineResponse {
+  RepositoryBaseline baseline = 1;
+}
+
+message RepositoryBaseline {
+  string repository = 1;
+  int32 total_jobs_observed = 2;
+  google.protobuf.Timestamp first_observed = 3;
+  google.protobuf.Timestamp last_updated = 4;
+  string status = 5; // "learning", "active"
+
+  repeated ProcessProfile process_profiles = 6;
+  repeated NetworkProfile network_profiles = 7;
+  repeated FileAccessProfile file_access_profiles = 8;
+}
+
+message ProcessProfile {
+  string binary_path = 1;
+  repeated string typical_args_patterns = 2;
+  string typical_parent = 3;
+  float frequency = 4; // 0.0-1.0, fraction of builds this appears in
+  google.protobuf.Timestamp first_seen = 5;
+  google.protobuf.Timestamp last_seen = 6;
+}
+
+message NetworkProfile {
+  repeated string destination_cidrs = 1;
+  repeated uint32 typical_ports = 2;
+  float frequency = 3;
+  google.protobuf.Timestamp first_seen = 4;
+  google.protobuf.Timestamp last_seen = 5;
+}
+
+message FileAccessProfile {
+  repeated string path_patterns = 1;
+  repeated string sensitive_paths_accessed = 2;
+  float frequency = 3;
+  google.protobuf.Timestamp first_seen = 4;
+  google.protobuf.Timestamp last_seen = 5;
+}
+
+message ListBaselinesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListBaselinesResponse {
+  repeated RepositoryBaseline baselines = 1;
+  string next_page_token = 2;
+}
+
+// --- Findings ---
+
+message Finding {
+  string id = 1;
+  string repository = 2;
+  string job_id = 3;
+
+  // Deviation details
+  repeated ScoredDeviation deviations = 4;
+
+  // Triage results
+  TriageResult l1_result = 5;
+  TriageResult l2_result = 6;
+
+  // Final verdict
+  string verdict = 7;     // "benign", "suspicious", "critical"
+  float confidence = 8;
+  string severity = 9;    // "low", "medium", "high", "critical"
+
+  // Context
+  repeated string mitre_mappings = 10;
+  string reasoning = 11;
+  string recommended_action = 12;
+
+  google.protobuf.Timestamp created_at = 13;
+  string status = 14; // "open", "acknowledged", "resolved", "false_positive"
+}
+
+message ScoredDeviation {
+  Event event = 1;
+  float score = 2;
+  string deviation_type = 3;  // "new_process", "new_network", "new_file", "anomalous_args"
+  string description = 4;
+}
+
+message TriageResult {
+  string layer = 1;        // "l1", "l2"
+  string verdict = 2;      // "benign", "suspicious", "critical"
+  float confidence = 3;
+  string reasoning = 4;
+  int64 latency_ms = 5;
+}
+
+message GetFindingRequest {
+  string finding_id = 1;
+}
+
+message ListFindingsRequest {
+  string repository = 1;
+  string severity = 2;
+  string status = 3;
+  google.protobuf.Timestamp since = 4;
+  int32 page_size = 5;
+  string page_token = 6;
+}
+
+message ListFindingsResponse {
+  repeated Finding findings = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+// --- Jobs ---
+
+message GetJobRecordRequest {
+  string job_id = 1;
+}
+
+message ListJobRecordsRequest {
+  string repository = 1;
+  google.protobuf.Timestamp since = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListJobRecordsResponse {
+  repeated JobRecordSummary job_records = 1;
+  string next_page_token = 2;
+}
+
+message JobRecordSummary {
+  string job_id = 1;
+  string repository = 2;
+  string workflow_name = 3;
+  int32 event_count = 4;
+  int32 deviation_count = 5;
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp end_time = 7;
+}
+
+// --- Agents ---
+
+message ListAgentsRequest {}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+message AgentInfo {
+  string agent_id = 1;
+  string hostname = 2;
+  string version = 3;
+  string sensor_type = 4;
+  string status = 5; // "online", "offline"
+  google.protobuf.Timestamp last_heartbeat = 6;
+  google.protobuf.Timestamp registered_at = 7;
+  int64 total_events_collected = 8;
+  int64 total_jobs_processed = 9;
+}

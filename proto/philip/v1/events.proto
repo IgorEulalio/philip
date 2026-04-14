@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package philip.v1;
+
+option go_package = "github.com/philip-ai/philip/pkg/proto/philip/v1";
+
+import "google/protobuf/timestamp.proto";
+
+// EventType enumerates the kinds of events Philip tracks.
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_PROCESS_EXEC = 1;
+  EVENT_TYPE_PROCESS_EXIT = 2;
+  EVENT_TYPE_NETWORK_CONNECT = 3;
+  EVENT_TYPE_FILE_ACCESS = 4;
+}
+
+// Event represents a single observable action during a CI/CD job.
+message Event {
+  string id = 1;
+  EventType type = 2;
+  google.protobuf.Timestamp timestamp = 3;
+
+  // Process context (always present)
+  uint32 pid = 4;
+  uint32 parent_pid = 5;
+  string binary_path = 6;
+  repeated string args = 7;
+  string cwd = 8;
+  uint32 uid = 9;
+
+  // Process exec fields
+  ProcessExecEvent process_exec = 10;
+
+  // Process exit fields
+  ProcessExitEvent process_exit = 11;
+
+  // Network connect fields
+  NetworkConnectEvent network_connect = 12;
+
+  // File access fields
+  FileAccessEvent file_access = 13;
+}
+
+message ProcessExecEvent {
+  // Full path to the executed binary
+  string binary_path = 1;
+  // Command line arguments
+  repeated string args = 2;
+  // Environment variables (filtered — only security-relevant ones)
+  map<string, string> env = 3;
+}
+
+message ProcessExitEvent {
+  int32 exit_code = 1;
+  // Duration of the process in milliseconds
+  int64 duration_ms = 2;
+}
+
+message NetworkConnectEvent {
+  string dest_ip = 1;
+  uint32 dest_port = 2;
+  string protocol = 3; // "tcp", "udp"
+  string dest_hostname = 4; // reverse DNS if available
+}
+
+message FileAccessEvent {
+  string file_path = 1;
+  uint32 flags = 2; // open flags (O_RDONLY, O_WRONLY, etc.)
+  string access_type = 3; // "read", "write", "create", "delete"
+}
+
+// ProcessAncestry captures the full process chain from event back to runner root.
+message ProcessAncestry {
+  repeated ProcessInfo ancestors = 1;
+}
+
+message ProcessInfo {
+  uint32 pid = 1;
+  string binary_path = 2;
+  repeated string args = 3;
+}
+
+// JobEventRecord is the complete record of all events during a single CI/CD job run.
+message JobEventRecord {
+  string job_id = 1;
+  JobMetadata metadata = 2;
+  repeated Event events = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  // Process tree serialized as adjacency list
+  map<uint32, ProcessInfo> process_tree = 6;
+}
+
+// JobMetadata contains CI/CD context about the job.
+message JobMetadata {
+  string repository = 1;       // e.g. "owner/repo"
+  string workflow_name = 2;    // e.g. "CI"
+  string workflow_file = 3;    // e.g. ".github/workflows/ci.yml"
+  string run_id = 4;           // GitHub Actions run ID
+  string run_number = 5;
+  string branch = 6;
+  string commit_sha = 7;
+  string trigger_event = 8;    // "push", "pull_request", "schedule", etc.
+  string runner_name = 9;
+  string runner_os = 10;
+}

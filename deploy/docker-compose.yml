@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: philip
+      POSTGRES_PASSWORD: philip
+      POSTGRES_DB: philip
+    ports:
+      - "5432:5432"
+    volumes:
+      - philip_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U philip"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  philip-server:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile.backend
+    ports:
+      - "9090:9090"  # gRPC (agent communication)
+      - "8080:8080"  # REST API
+    environment:
+      PHILIP_DB_HOST: postgres
+      PHILIP_DB_USER: philip
+      PHILIP_DB_PASSWORD: philip
+      PHILIP_DB_NAME: philip
+      PHILIP_GRPC_ADDRESS: ":9090"
+      PHILIP_REST_ADDRESS: ":8080"
+      PHILIP_LOG_LEVEL: info
+      # Set these to enable features:
+      # OPENAI_API_KEY: your-api-key
+      # PHILIP_SLACK_WEBHOOK: https://hooks.slack.com/...
+      # PHILIP_WEBHOOK_URL: https://your-webhook-endpoint
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  philip_data:
