@@ -4,16 +4,18 @@ import (
 	"time"
 )
 
-// ProcessProfile tracks the behavioral profile of a binary in a repository's builds.
+// ProcessProfile tracks the behavioral profile of a binary in a job's builds.
 type ProcessProfile struct {
-	BinaryPath          string    `json:"binary_path"`
-	TypicalArgsPatterns []string  `json:"typical_args_patterns"`
-	TypicalParent       string    `json:"typical_parent"`
-	Frequency           float64   `json:"frequency"` // 0.0-1.0
-	ObservedCount       int       `json:"observed_count"`
-	TotalJobs           int       `json:"total_jobs"`
-	FirstSeen           time.Time `json:"first_seen"`
-	LastSeen            time.Time `json:"last_seen"`
+	BinaryPath          string             `json:"binary_path"`
+	TypicalArgsPatterns []string           `json:"typical_args_patterns"`
+	TypicalParent       string             `json:"typical_parent"`
+	KnownParents        []string           `json:"known_parents,omitempty"`
+	StepFrequency       map[string]float64 `json:"step_frequency,omitempty"` // step_name -> frequency
+	Frequency           float64            `json:"frequency"`                // 0.0-1.0
+	ObservedCount       int                `json:"observed_count"`
+	TotalJobs           int                `json:"total_jobs"`
+	FirstSeen           time.Time          `json:"first_seen"`
+	LastSeen            time.Time          `json:"last_seen"`
 }
 
 // NetworkProfile tracks the network connection profile for a repository's builds.
@@ -38,9 +40,12 @@ type FileAccessProfile struct {
 	LastSeen               time.Time `json:"last_seen"`
 }
 
-// RepositoryBaseline is the complete behavioral baseline for a repository.
+// RepositoryBaseline is the complete behavioral baseline for a specific job
+// within a repository. Keyed by (Repository, WorkflowFile, JobName).
 type RepositoryBaseline struct {
 	Repository         string              `json:"repository"`
+	WorkflowFile       string              `json:"workflow_file"`
+	JobName            string              `json:"job_name"`
 	TotalJobsObserved  int                 `json:"total_jobs_observed"`
 	Status             string              `json:"status"` // "learning", "active"
 	LearningThreshold  int                 `json:"learning_threshold"`
@@ -49,6 +54,11 @@ type RepositoryBaseline struct {
 	ProcessProfiles    []ProcessProfile    `json:"process_profiles"`
 	NetworkProfiles    []NetworkProfile    `json:"network_profiles"`
 	FileAccessProfiles []FileAccessProfile `json:"file_access_profiles"`
+}
+
+// Key returns a display string for this baseline's composite key.
+func (b *RepositoryBaseline) Key() string {
+	return b.Repository + "/" + b.WorkflowFile + "/" + b.JobName
 }
 
 // IsLearning returns true if the baseline is still in learning mode.

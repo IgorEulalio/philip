@@ -18,6 +18,7 @@ type StepInfo struct {
 // JobInfo contains metadata about the current CI/CD job, sent by the GitHub Action.
 type JobInfo struct {
 	JobID        string `json:"job_id"`
+	JobName      string `json:"job_name"`
 	Repository   string `json:"repository"`
 	WorkflowName string `json:"workflow_name"`
 	WorkflowFile string `json:"workflow_file"`
@@ -75,6 +76,13 @@ func (sc *StepCorrelator) CurrentStep() string {
 		return sc.steps[sc.currentStep].StepName
 	}
 	return ""
+}
+
+// CurrentStepNumber returns the current step number (0-indexed), or -1 if no step is active.
+func (sc *StepCorrelator) CurrentStepNumber() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	return sc.currentStep
 }
 
 // ListenAndServe starts the unix socket server that receives metadata from the GitHub Action.

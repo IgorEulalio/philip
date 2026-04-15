@@ -144,15 +144,20 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);`
 
 const migrationCreateBaselines = `
 CREATE TABLE IF NOT EXISTS baselines (
-    repository TEXT PRIMARY KEY,
+    repository TEXT NOT NULL,
+    workflow_file TEXT NOT NULL DEFAULT '',
+    job_name TEXT NOT NULL DEFAULT '',
     total_jobs_observed INT NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'learning',
     first_observed TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     process_profiles JSONB NOT NULL DEFAULT '[]',
     network_profiles JSONB NOT NULL DEFAULT '[]',
-    file_access_profiles JSONB NOT NULL DEFAULT '[]'
-);`
+    file_access_profiles JSONB NOT NULL DEFAULT '[]',
+    PRIMARY KEY (repository, workflow_file, job_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_baselines_repository ON baselines(repository);`
 
 const migrationCreateFindings = `
 CREATE TABLE IF NOT EXISTS findings (
@@ -243,17 +248,20 @@ func (s *Store) InsertEvent(ctx context.Context, id, jobID, eventType string, ti
 
 // --- Baseline operations ---
 
-// GetBaseline retrieves the baseline for a repository.
-func (s *Store) GetBaseline(ctx context.Context, repository string) (*BaselineRecord, error) {
+// GetBaseline retrieves the baseline for a specific job.
+func (s *Store) GetBaseline(ctx context.Context, repository, workflowFile, jobName string) (*BaselineRecord, error) {
 	var b BaselineRecord
 	var processJSON, networkJSON, fileJSON []byte
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT repository, total_jobs_observed, status, first_observed, last_updated,
+		SELECT repository, workflow_file, job_name, total_jobs_observed, status,
+			first_observed, last_updated,
 			process_profiles, network_profiles, file_access_profiles
-		FROM baselines WHERE repository = $1
-	`, repository).Scan(
-		&b.Repository, &b.TotalJobsObserved, &b.Status, &b.FirstObserved, &b.LastUpdated,
+		FROM baselines
+		WHERE repository = $1 AND workflow_file = $2 AND job_name = $3
+	`, repository, workflowFile, jobName).Scan(
+		&b.Repository, &b.WorkflowFile, &b.JobName,
+		&b.TotalJobsObserved, &b.Status, &b.FirstObserved, &b.LastUpdated,
 		&processJSON, &networkJSON, &fileJSON,
 	)
 	if err == sql.ErrNoRows {
@@ -270,24 +278,26 @@ func (s *Store) GetBaseline(ctx context.Context, repository string) (*BaselineRe
 	return &b, nil
 }
 
-// UpsertBaseline creates or updates a baseline.
+// UpsertBaseline creates or updates a baseline (composite key: repository + workflow_file + job_name).
 func (s *Store) UpsertBaseline(ctx context.Context, b *BaselineRecord) error {
 	processJSON, _ := json.Marshal(b.ProcessProfiles)
 	networkJSON, _ := json.Marshal(b.NetworkProfiles)
 	fileJSON, _ := json.Marshal(b.FileAccessProfiles)
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO baselines (repository, total_jobs_observed, status, first_observed, last_updated,
+		INSERT INTO baselines (repository, workflow_file, job_name,
+			total_jobs_observed, status, first_observed, last_updated,
 			process_profiles, network_profiles, file_access_profiles)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (repository) DO UPDATE SET
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (repository, workflow_file, job_name) DO UPDATE SET
 			total_jobs_observed = EXCLUDED.total_jobs_observed,
 			status = EXCLUDED.status,
 			last_updated = EXCLUDED.last_updated,
 			process_profiles = EXCLUDED.process_profiles,
 			network_profiles = EXCLUDED.network_profiles,
 			file_access_profiles = EXCLUDED.file_access_profiles
-	`, b.Repository, b.TotalJobsObserved, b.Status, b.FirstObserved, b.LastUpdated,
+	`, b.Repository, b.WorkflowFile, b.JobName,
+		b.TotalJobsObserved, b.Status, b.FirstObserved, b.LastUpdated,
 		processJSON, networkJSON, fileJSON)
 	return err
 }
@@ -366,9 +376,12 @@ func (s *Store) ListFindings(ctx context.Context, repository, severity, status s
 
 // --- Record types ---
 
-// BaselineRecord is the database representation of a repository baseline.
+// BaselineRecord is the database representation of a job baseline.
+// Keyed by (Repository, WorkflowFile, JobName).
 type BaselineRecord struct {
 	Repository         string                `json:"repository"`
+	WorkflowFile       string                `json:"workflow_file"`
+	JobName            string                `json:"job_name"`
 	TotalJobsObserved  int                   `json:"total_jobs_observed"`
 	Status             string                `json:"status"` // "learning", "active"
 	FirstObserved      time.Time             `json:"first_observed"`
@@ -380,12 +393,14 @@ type BaselineRecord struct {
 
 // ProcessProfileDB is a process profile stored in the database.
 type ProcessProfileDB struct {
-	BinaryPath          string    `json:"binary_path"`
-	TypicalArgsPatterns []string  `json:"typical_args_patterns"`
-	TypicalParent       string    `json:"typical_parent"`
-	Frequency           float64   `json:"frequency"`
-	FirstSeen           time.Time `json:"first_seen"`
-	LastSeen            time.Time `json:"last_seen"`
+	BinaryPath          string             `json:"binary_path"`
+	TypicalArgsPatterns []string           `json:"typical_args_patterns"`
+	TypicalParent       string             `json:"typical_parent"`
+	KnownParents        []string           `json:"known_parents,omitempty"`
+	StepFrequency       map[string]float64 `json:"step_frequency,omitempty"`
+	Frequency           float64            `json:"frequency"`
+	FirstSeen           time.Time          `json:"first_seen"`
+	LastSeen            time.Time          `json:"last_seen"`
 }
 
 // NetworkProfileDB is a network profile stored in the database.

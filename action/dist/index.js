@@ -25719,6 +25719,7 @@ async function run() {
         // Gather job metadata from GitHub Actions environment
         const jobData = {
             job_id: `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_JOB}`,
+            job_name: process.env.GITHUB_JOB || '',
             repository: process.env.GITHUB_REPOSITORY || '',
             workflow_name: process.env.GITHUB_WORKFLOW || '',
             workflow_file: process.env.GITHUB_WORKFLOW_REF || '',

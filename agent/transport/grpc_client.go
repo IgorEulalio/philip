@@ -128,6 +128,7 @@ func toProtoJobRecord(record collector.JobEventRecord) *pb.JobEventRecord {
 		JobId: record.JobID,
 		Metadata: &pb.JobMetadata{
 			Repository:   record.Metadata.Repository,
+			JobName:      record.Metadata.JobName,
 			WorkflowName: record.Metadata.WorkflowName,
 			WorkflowFile: record.Metadata.WorkflowFile,
 			RunId:        record.Metadata.RunID,
@@ -147,14 +148,17 @@ func toProtoJobRecord(record collector.JobEventRecord) *pb.JobEventRecord {
 
 func toProtoEvent(evt sensor.Event) *pb.Event {
 	pbEvt := &pb.Event{
-		Id:        evt.ID,
-		Timestamp: timestamppb.New(evt.Timestamp),
-		Pid:       evt.PID,
-		ParentPid: evt.ParentPID,
-		BinaryPath: evt.Binary,
-		Args:      evt.Args,
-		Cwd:       evt.CWD,
-		Uid:       evt.UID,
+		Id:           evt.ID,
+		Timestamp:    timestamppb.New(evt.Timestamp),
+		Pid:          evt.PID,
+		ParentPid:    evt.ParentPID,
+		BinaryPath:   evt.Binary,
+		Args:         evt.Args,
+		Cwd:          evt.CWD,
+		Uid:          evt.UID,
+		StepName:     evt.StepName,
+		StepNumber:   int32(evt.StepNumber),
+		ParentBinary: evt.ParentBinary,
 	}
 
 	switch evt.Type {

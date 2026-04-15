@@ -1,7 +1,7 @@
 {
   "uid": "philip-deviation-timeline",
   "title": "Philip — Deviation Timeline",
-  "description": "Chronological deviations color-coded by severity",
+  "description": "Chronological deviations color-coded by severity and type",
   "tags": ["philip"],
   "timezone": "browser",
   "editable": true,
@@ -20,27 +20,61 @@
         "current": { "text": "All", "value": "$__all" },
         "refresh": 2,
         "multi": true
+      },
+      {
+        "name": "job_name",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(philip_jobs_analyzed_total{repository=~\"$repository\"}, job_name)",
+        "query": "label_values(philip_jobs_analyzed_total{repository=~\"$repository\"}, job_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "multi": true
       }
     ]
   },
   "panels": [
     {
       "id": 1,
-      "title": "Deviation Rate",
+      "title": "Deviation Rate by Type",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by(repository, type)(rate(philip_deviations_total{repository=~\"$repository\"}[5m]))",
-          "legendFormat": "{{repository}} — {{type}}"
+          "expr": "sum by(repository, job_name, type)(rate(philip_deviations_total{repository=~\"$repository\", job_name=~\"$job_name\"}[5m]))",
+          "legendFormat": "{{repository}}/{{job_name}} — {{type}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20 }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*new_process.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*new_network.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*suspicious_args.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*unexpected_parent.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*sensitive_path.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
+          }
+        ]
       }
     },
     {
@@ -52,7 +86,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by(le)(rate(philip_deviation_score_bucket{repository=~\"$repository\"}[1h]))",
+          "expr": "sum by(le)(rate(philip_deviation_score_bucket{repository=~\"$repository\", job_name=~\"$job_name\"}[1h]))",
           "legendFormat": "{{le}}",
           "format": "heatmap"
         }
@@ -130,10 +164,48 @@
     },
     {
       "id": 5,
+      "title": "Deviation Breakdown by Type",
+      "type": "barchart",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by(type)(increase(philip_deviations_total{repository=~\"$repository\", job_name=~\"$job_name\"}[1h]))",
+          "legendFormat": "{{type}}"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "new_process" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "new_network" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "suspicious_args" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "unexpected_parent" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "sensitive_path" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
       "title": "Recent Findings",
       "type": "table",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },

@@ -8,9 +8,11 @@ import (
 )
 
 // EventNormalizer receives raw sensor events, filters them to the runner's
-// process tree, and enriches them before passing to the job buffer.
+// process tree, and enriches them with step context and parent binary before
+// passing to the job buffer.
 type EventNormalizer struct {
 	tree        *ProcessTree
+	correlator  *StepCorrelator
 	output      chan NormalizedEvent
 	runnerName  string
 	logger      *slog.Logger
@@ -26,9 +28,10 @@ type NormalizedEvent struct {
 }
 
 // NewEventNormalizer creates a new event normalizer.
-func NewEventNormalizer(tree *ProcessTree, runnerName string, logger *slog.Logger) *EventNormalizer {
+func NewEventNormalizer(tree *ProcessTree, correlator *StepCorrelator, runnerName string, logger *slog.Logger) *EventNormalizer {
 	return &EventNormalizer{
 		tree:       tree,
+		correlator: correlator,
 		output:     make(chan NormalizedEvent, 10000),
 		runnerName: runnerName,
 		logger:     logger,
@@ -71,6 +74,17 @@ func (n *EventNormalizer) handleEvent(evt sensor.Event) {
 	// Only pass through events that belong to the runner's process tree
 	if !n.tree.IsDescendant(evt.PID) {
 		return
+	}
+
+	// Enrich: step context from StepCorrelator
+	if n.correlator != nil {
+		evt.StepName = n.correlator.CurrentStep()
+		evt.StepNumber = n.correlator.CurrentStepNumber()
+	}
+
+	// Enrich: parent binary from process tree
+	if parentNode, ok := n.tree.GetNode(evt.ParentPID); ok {
+		evt.ParentBinary = parentNode.Binary
 	}
 
 	normalized := NormalizedEvent{

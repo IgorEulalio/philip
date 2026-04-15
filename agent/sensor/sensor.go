@@ -58,6 +58,13 @@ type Event struct {
 	// Exit fields (for ProcessExit)
 	ExitCode   int32
 	DurationMs int64
+
+	// Step context — populated by EventNormalizer from StepCorrelator
+	StepName   string
+	StepNumber int
+
+	// Process lineage — populated by EventNormalizer from ProcessTree
+	ParentBinary string
 }
 
 // Sensor is the abstraction layer for different event sources.

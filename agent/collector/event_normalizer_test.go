@@ -64,7 +64,7 @@ func TestEventNormalizer_IsRunnerProcess(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 			tree := NewProcessTree()
-			n := NewEventNormalizer(tree, tc.runnerName, logger)
+			n := NewEventNormalizer(tree, nil, tc.runnerName, logger)
 
 			got := n.isRunnerProcess(tc.event)
 			if got != tc.want {
@@ -103,7 +103,7 @@ func TestEventNormalizer_FiltersNonRunnerEvents(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 			tree := NewProcessTree()
-			n := NewEventNormalizer(tree, "", logger)
+			n := NewEventNormalizer(tree, nil, "", logger)
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -142,7 +142,7 @@ func TestEventNormalizer_FiltersNonRunnerEvents(t *testing.T) {
 func TestEventNormalizer_AutoDetectsRunnerRoot(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	tree := NewProcessTree()
-	n := NewEventNormalizer(tree, "", logger)
+	n := NewEventNormalizer(tree, nil, "", logger)
 
 	// Before runner detection, root should not be set
 	if _, set := tree.RootPID(); set {

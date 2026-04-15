@@ -33,10 +33,11 @@ func NewEngine(store storage.StoreInterface, logger *slog.Logger) *Engine {
 	}
 }
 
-// UpdateBaseline updates the baseline for a repository based on a new job's events.
-func (e *Engine) UpdateBaseline(ctx context.Context, repository string, events []sensor.Event) (*RepositoryBaseline, error) {
+// UpdateBaseline updates the baseline for a specific job based on new events.
+// The baseline is keyed by (repository, workflowFile, jobName).
+func (e *Engine) UpdateBaseline(ctx context.Context, repository, workflowFile, jobName string, events []sensor.Event) (*RepositoryBaseline, error) {
 	// Load existing baseline
-	existing, err := e.loadBaseline(ctx, repository)
+	existing, err := e.loadBaseline(ctx, repository, workflowFile, jobName)
 	if err != nil {
 		return nil, err
 	}
@@ -44,6 +45,8 @@ func (e *Engine) UpdateBaseline(ctx context.Context, repository string, events [
 	if existing == nil {
 		existing = &RepositoryBaseline{
 			Repository:        repository,
+			WorkflowFile:      workflowFile,
+			JobName:           jobName,
 			Status:            "learning",
 			LearningThreshold: e.learningThreshold,
 			FirstObserved:     time.Now(),
@@ -61,7 +64,10 @@ func (e *Engine) UpdateBaseline(ctx context.Context, repository string, events [
 	// Transition from learning to active if threshold is met
 	if existing.Status == "learning" && existing.TotalJobsObserved >= existing.LearningThreshold {
 		existing.Status = "active"
-		e.logger.Info("baseline activated", "repository", repository,
+		e.logger.Info("baseline activated",
+			"repository", repository,
+			"workflow_file", workflowFile,
+			"job_name", jobName,
 			"jobs_observed", existing.TotalJobsObserved)
 	}
 
@@ -72,6 +78,8 @@ func (e *Engine) UpdateBaseline(ctx context.Context, repository string, events [
 
 	e.logger.Info("baseline updated",
 		"repository", repository,
+		"workflow_file", workflowFile,
+		"job_name", jobName,
 		"status", existing.Status,
 		"jobs_observed", existing.TotalJobsObserved,
 		"process_profiles", len(existing.ProcessProfiles),
@@ -80,28 +88,30 @@ func (e *Engine) UpdateBaseline(ctx context.Context, repository string, events [
 	return existing, nil
 }
 
-// GetBaseline retrieves the current baseline for a repository.
-func (e *Engine) GetBaseline(ctx context.Context, repository string) (*RepositoryBaseline, error) {
-	return e.loadBaseline(ctx, repository)
+// GetBaseline retrieves the current baseline for a specific job.
+func (e *Engine) GetBaseline(ctx context.Context, repository, workflowFile, jobName string) (*RepositoryBaseline, error) {
+	return e.loadBaseline(ctx, repository, workflowFile, jobName)
 }
 
 func (e *Engine) updateProcessProfiles(baseline *RepositoryBaseline, events []sensor.Event) {
-	// Count unique binaries in this job
-	seenBinaries := make(map[string]struct {
+	// Count unique binaries in this job, capturing parent and step context
+	type binaryInfo struct {
 		args   []string
 		parent string
-	})
+		step   string
+	}
+	seenBinaries := make(map[string]binaryInfo)
 
 	for _, evt := range events {
 		if evt.Type != sensor.EventTypeProcessExec {
 			continue
 		}
 		if _, seen := seenBinaries[evt.Binary]; !seen {
-			parentBinary := "" // would need process tree for parent binary
-			seenBinaries[evt.Binary] = struct {
-				args   []string
-				parent string
-			}{args: evt.Args, parent: parentBinary}
+			seenBinaries[evt.Binary] = binaryInfo{
+				args:   evt.Args,
+				parent: evt.ParentBinary,
+				step:   evt.StepName,
+			}
 		}
 	}
 
@@ -111,10 +121,20 @@ func (e *Engine) updateProcessProfiles(baseline *RepositoryBaseline, events []se
 		profile := baseline.FindProcessProfile(binary)
 		if profile == nil {
 			// New binary — add to baseline
+			var knownParents []string
+			if info.parent != "" {
+				knownParents = []string{info.parent}
+			}
+			stepFreq := make(map[string]float64)
+			if info.step != "" {
+				stepFreq[info.step] = 1.0 / float64(totalJobs)
+			}
 			baseline.ProcessProfiles = append(baseline.ProcessProfiles, ProcessProfile{
 				BinaryPath:          binary,
 				TypicalArgsPatterns: info.args,
 				TypicalParent:       info.parent,
+				KnownParents:        knownParents,
+				StepFrequency:       stepFreq,
 				Frequency:           1.0 / float64(totalJobs),
 				ObservedCount:       1,
 				TotalJobs:           totalJobs,
@@ -133,6 +153,22 @@ func (e *Engine) updateProcessProfiles(baseline *RepositoryBaseline, events []se
 			profile.TypicalArgsPatterns = mergeStringSlice(
 				profile.TypicalArgsPatterns, info.args,
 			)
+			// Track parent binary
+			if info.parent != "" {
+				if profile.TypicalParent == "" {
+					profile.TypicalParent = info.parent
+				}
+				profile.KnownParents = mergeStringSlice(profile.KnownParents, []string{info.parent})
+			}
+			// Track step frequency
+			if info.step != "" {
+				if profile.StepFrequency == nil {
+					profile.StepFrequency = make(map[string]float64)
+				}
+				profile.StepFrequency[info.step] = exponentialDecayFrequency(
+					profile.StepFrequency[info.step], profile.ObservedCount, totalJobs,
+				)
+			}
 		}
 	}
 
@@ -194,8 +230,8 @@ func (e *Engine) updateFileAccessProfiles(baseline *RepositoryBaseline, events [
 	// For MVP, we only track process and network profiles
 }
 
-func (e *Engine) loadBaseline(ctx context.Context, repository string) (*RepositoryBaseline, error) {
-	record, err := e.store.GetBaseline(ctx, repository)
+func (e *Engine) loadBaseline(ctx context.Context, repository, workflowFile, jobName string) (*RepositoryBaseline, error) {
+	record, err := e.store.GetBaseline(ctx, repository, workflowFile, jobName)
 	if err != nil {
 		return nil, err
 	}
@@ -203,8 +239,10 @@ func (e *Engine) loadBaseline(ctx context.Context, repository string) (*Reposito
 		return nil, nil
 	}
 
-	baseline := &RepositoryBaseline{
+	bl := &RepositoryBaseline{
 		Repository:        record.Repository,
+		WorkflowFile:      record.WorkflowFile,
+		JobName:           record.JobName,
 		TotalJobsObserved: record.TotalJobsObserved,
 		Status:            record.Status,
 		LearningThreshold: defaultLearningThreshold,
@@ -213,10 +251,12 @@ func (e *Engine) loadBaseline(ctx context.Context, repository string) (*Reposito
 	}
 
 	for _, p := range record.ProcessProfiles {
-		baseline.ProcessProfiles = append(baseline.ProcessProfiles, ProcessProfile{
+		bl.ProcessProfiles = append(bl.ProcessProfiles, ProcessProfile{
 			BinaryPath:          p.BinaryPath,
 			TypicalArgsPatterns: p.TypicalArgsPatterns,
 			TypicalParent:       p.TypicalParent,
+			KnownParents:        p.KnownParents,
+			StepFrequency:       p.StepFrequency,
 			Frequency:           p.Frequency,
 			FirstSeen:           p.FirstSeen,
 			LastSeen:            p.LastSeen,
@@ -224,7 +264,7 @@ func (e *Engine) loadBaseline(ctx context.Context, repository string) (*Reposito
 	}
 
 	for _, n := range record.NetworkProfiles {
-		baseline.NetworkProfiles = append(baseline.NetworkProfiles, NetworkProfile{
+		bl.NetworkProfiles = append(bl.NetworkProfiles, NetworkProfile{
 			DestinationCIDRs: n.DestinationCIDRs,
 			TypicalPorts:     n.TypicalPorts,
 			Frequency:        n.Frequency,
@@ -233,12 +273,14 @@ func (e *Engine) loadBaseline(ctx context.Context, repository string) (*Reposito
 		})
 	}
 
-	return baseline, nil
+	return bl, nil
 }
 
 func (e *Engine) saveBaseline(ctx context.Context, baseline *RepositoryBaseline) error {
 	record := &storage.BaselineRecord{
 		Repository:        baseline.Repository,
+		WorkflowFile:      baseline.WorkflowFile,
+		JobName:           baseline.JobName,
 		TotalJobsObserved: baseline.TotalJobsObserved,
 		Status:            baseline.Status,
 		FirstObserved:     baseline.FirstObserved,
@@ -250,6 +292,8 @@ func (e *Engine) saveBaseline(ctx context.Context, baseline *RepositoryBaseline)
 			BinaryPath:          p.BinaryPath,
 			TypicalArgsPatterns: p.TypicalArgsPatterns,
 			TypicalParent:       p.TypicalParent,
+			KnownParents:        p.KnownParents,
+			StepFrequency:       p.StepFrequency,
 			Frequency:           p.Frequency,
 			FirstSeen:           p.FirstSeen,
 			LastSeen:            p.LastSeen,

@@ -162,45 +162,51 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 	}
 	alertRouter := alerting.NewRouter(alertIntegrations, logger)
 
-	// Job analysis callback — triggered when a new job record is ingested
-	analyzeJob := func(jobID string, repository string) {
+	// Job analysis callback — triggered when a new job record is ingested.
+	// Receives events directly from the ingestion handler (no DB round-trip).
+	analyzeJob := func(jobID, repository, workflowFile, jobName string, events []sensor.Event) {
 		analyzeCtx, analyzeCancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer analyzeCancel()
 
-		// Get events for this job from storage
-		// In a production system, this would use a proper query
-		events := []sensor.Event{} // Placeholder — events come from the ingestion handler
+		logger.Info("analyzing job",
+			"job_id", jobID,
+			"repository", repository,
+			"workflow_file", workflowFile,
+			"job_name", jobName,
+			"event_count", len(events))
 
-		// Update baseline
-		bl, err := baselineEngine.UpdateBaseline(analyzeCtx, repository, events)
+		// Update baseline (per-job key)
+		bl, err := baselineEngine.UpdateBaseline(analyzeCtx, repository, workflowFile, jobName, events)
 		if err != nil {
-			logger.Error("failed to update baseline", "error", err, "repository", repository)
+			logger.Error("failed to update baseline", "error", err,
+				"repository", repository, "job_name", jobName)
 			return
 		}
 
 		// Update baseline metrics
-		metrics.BaselineStatus.WithLabelValues(repository, "learning").Set(0)
-		metrics.BaselineStatus.WithLabelValues(repository, "active").Set(0)
-		metrics.BaselineStatus.WithLabelValues(repository, bl.Status).Set(1)
-		metrics.BaselineJobsObserved.WithLabelValues(repository).Set(float64(bl.TotalJobsObserved))
-		metrics.BaselineProcessProfiles.WithLabelValues(repository).Set(float64(len(bl.ProcessProfiles)))
-		metrics.BaselineNetworkProfiles.WithLabelValues(repository).Set(float64(len(bl.NetworkProfiles)))
+		metrics.BaselineStatus.WithLabelValues(repository, jobName, "learning").Set(0)
+		metrics.BaselineStatus.WithLabelValues(repository, jobName, "active").Set(0)
+		metrics.BaselineStatus.WithLabelValues(repository, jobName, bl.Status).Set(1)
+		metrics.BaselineJobsObserved.WithLabelValues(repository, jobName).Set(float64(bl.TotalJobsObserved))
+		metrics.BaselineProcessProfiles.WithLabelValues(repository, jobName).Set(float64(len(bl.ProcessProfiles)))
+		metrics.BaselineNetworkProfiles.WithLabelValues(repository, jobName).Set(float64(len(bl.NetworkProfiles)))
 
 		// Score deviations
 		deviations := scorer.ScoreJob(bl, events)
 		if len(deviations) == 0 {
-			metrics.JobsAnalyzed.WithLabelValues(repository, "clean").Inc()
+			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "clean").Inc()
 			return
 		}
 
 		// Record deviation metrics
 		for _, dev := range deviations {
-			metrics.DeviationsTotal.WithLabelValues(repository, string(dev.DeviationType)).Inc()
-			metrics.DeviationScore.WithLabelValues(repository, string(dev.DeviationType)).Observe(dev.Score)
+			metrics.DeviationsTotal.WithLabelValues(repository, jobName, string(dev.DeviationType)).Inc()
+			metrics.DeviationScore.WithLabelValues(repository, jobName, string(dev.DeviationType)).Observe(dev.Score)
 		}
 
 		logger.Info("deviations detected",
 			"repository", repository,
+			"job_name", jobName,
 			"count", len(deviations))
 
 		// Run triage
@@ -217,8 +223,9 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 			metrics.TriageVerdicts.WithLabelValues(repository, "l1", string(l1Result.Verdict)).Inc()
 		}
 		if l1Result != nil && l1Result.Verdict == triage.VerdictBenign {
-			logger.Info("L1 classified all deviations as benign", "repository", repository)
-			metrics.JobsAnalyzed.WithLabelValues(repository, "benign").Inc()
+			logger.Info("L1 classified all deviations as benign",
+				"repository", repository, "job_name", jobName)
+			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "benign").Inc()
 			return
 		}
 
@@ -248,14 +255,14 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 
 		// Only alert on suspicious or critical with sufficient confidence
 		if finalResult.Verdict == triage.VerdictBenign {
-			metrics.JobsAnalyzed.WithLabelValues(repository, "benign").Inc()
+			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "benign").Inc()
 			return
 		}
 		if finalResult.Confidence < 0.6 {
 			logger.Info("low confidence finding, not alerting",
 				"verdict", finalResult.Verdict,
 				"confidence", finalResult.Confidence)
-			metrics.JobsAnalyzed.WithLabelValues(repository, "low_confidence").Inc()
+			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "low_confidence").Inc()
 			return
 		}
 
@@ -294,7 +301,7 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		if err := alertRouter.Route(alert); err != nil {
 			logger.Error("failed to route alert", "error", err)
 		}
-		metrics.JobsAnalyzed.WithLabelValues(repository, string(finalResult.Verdict)).Inc()
+		metrics.JobsAnalyzed.WithLabelValues(repository, jobName, string(finalResult.Verdict)).Inc()
 	}
 
 	// Initialize ingestion handler
@@ -320,7 +327,9 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 			http.Error(w, "repository parameter required", http.StatusBadRequest)
 			return
 		}
-		bl, err := baselineEngine.GetBaseline(r.Context(), repo)
+		workflowFile := r.URL.Query().Get("workflow_file")
+		jobName := r.URL.Query().Get("job_name")
+		bl, err := baselineEngine.GetBaseline(r.Context(), repo, workflowFile, jobName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

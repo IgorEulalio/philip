@@ -11,15 +11,19 @@ import (
 	"github.com/IgorEulalio/philip/backend/storage"
 )
 
+// JobReadyFunc is the callback signature when a job is ready for analysis.
+// It receives the job ID, baseline key (repository, workflowFile, jobName), and the raw events.
+type JobReadyFunc func(jobID, repository, workflowFile, jobName string, events []sensor.Event)
+
 // Handler processes incoming job event records from agents.
 type Handler struct {
 	store      storage.StoreInterface
-	onJobReady func(jobID string, repository string) // callback when a job is ready for analysis
+	onJobReady JobReadyFunc
 	logger     *slog.Logger
 }
 
 // NewHandler creates a new ingestion handler.
-func NewHandler(store storage.StoreInterface, onJobReady func(string, string), logger *slog.Logger) *Handler {
+func NewHandler(store storage.StoreInterface, onJobReady JobReadyFunc, logger *slog.Logger) *Handler {
 	return &Handler{
 		store:      store,
 		onJobReady: onJobReady,
@@ -94,9 +98,15 @@ func (h *Handler) IngestJobRecord(ctx context.Context, jobID string, metadata Jo
 		metrics.EventsIngested.WithLabelValues(metadata.Repository, evt.Type.String()).Inc()
 	}
 
+	// Resolve workflow_file: prefer WorkflowFile, fall back to WorkflowName
+	workflowFile := metadata.WorkflowFile
+	if workflowFile == "" {
+		workflowFile = metadata.WorkflowName
+	}
+
 	// Notify that this job is ready for baseline update and analysis
 	if h.onJobReady != nil {
-		h.onJobReady(jobID, metadata.Repository)
+		h.onJobReady(jobID, metadata.Repository, workflowFile, metadata.JobName, events)
 	}
 
 	return nil
@@ -107,6 +117,7 @@ type JobMetadata struct {
 	Repository   string
 	WorkflowName string
 	WorkflowFile string
+	JobName      string
 	RunID        string
 	RunNumber    string
 	Branch       string

@@ -9,48 +9,48 @@ var (
 		Help: "Total events ingested",
 	}, []string{"repository", "event_type"})
 
-	// JobsAnalyzed counts jobs analyzed, labeled by repository and verdict.
+	// JobsAnalyzed counts jobs analyzed, labeled by repository, job name, and verdict.
 	JobsAnalyzed = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "philip_jobs_analyzed_total",
 		Help: "Jobs analyzed by verdict",
-	}, []string{"repository", "verdict"})
+	}, []string{"repository", "job_name", "verdict"})
 
-	// BaselineStatus tracks baseline status per repository (1 for current status, 0 otherwise).
+	// BaselineStatus tracks baseline status per job (1 for current status, 0 otherwise).
 	BaselineStatus = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "philip_baseline_status",
-		Help: "Baseline status per repository (1=current, 0=not)",
-	}, []string{"repository", "status"})
+		Help: "Baseline status per job (1=current, 0=not)",
+	}, []string{"repository", "job_name", "status"})
 
 	// BaselineJobsObserved tracks total jobs observed per baseline.
 	BaselineJobsObserved = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "philip_baseline_jobs_observed",
 		Help: "Total jobs observed in baseline",
-	}, []string{"repository"})
+	}, []string{"repository", "job_name"})
 
 	// BaselineProcessProfiles tracks number of process profiles per baseline.
 	BaselineProcessProfiles = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "philip_baseline_process_profiles",
 		Help: "Number of process profiles in baseline",
-	}, []string{"repository"})
+	}, []string{"repository", "job_name"})
 
 	// BaselineNetworkProfiles tracks number of network profiles per baseline.
 	BaselineNetworkProfiles = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "philip_baseline_network_profiles",
 		Help: "Number of network profiles in baseline",
-	}, []string{"repository"})
+	}, []string{"repository", "job_name"})
 
-	// DeviationsTotal counts deviations detected, labeled by repository and type.
+	// DeviationsTotal counts deviations detected, labeled by repository, job name, and type.
 	DeviationsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "philip_deviations_total",
 		Help: "Total deviations detected",
-	}, []string{"repository", "type"})
+	}, []string{"repository", "job_name", "type"})
 
 	// DeviationScore tracks the distribution of deviation scores.
 	DeviationScore = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "philip_deviation_score",
 		Help:    "Distribution of deviation scores",
 		Buckets: []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0},
-	}, []string{"repository", "type"})
+	}, []string{"repository", "job_name", "type"})
 
 	// FindingsTotal counts findings stored, labeled by repository, verdict, and severity.
 	FindingsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{

@@ -230,5 +230,25 @@ func defaultL1Rules() []L1Rule {
 			Confidence: 0.85,
 			Reasoning:  "Process environment dump detected — may expose CI/CD secrets",
 		},
+		{
+			Name:        "suspicious_args_critical",
+			Description: "Suspicious argument patterns are strong attack indicators",
+			Match: func(d detection.ScoredDeviation) bool {
+				return d.DeviationType == detection.DeviationSuspiciousArgs && d.Score >= 0.85
+			},
+			Verdict:    VerdictCritical,
+			Confidence: 0.85,
+			Reasoning:  "Suspicious command-line argument pattern detected — possible supply chain attack",
+		},
+		{
+			Name:        "unexpected_parent_high_risk",
+			Description: "High-risk parent-child process relationship",
+			Match: func(d detection.ScoredDeviation) bool {
+				return d.DeviationType == detection.DeviationUnexpectedParent && d.Score >= 0.95
+			},
+			Verdict:    VerdictCritical,
+			Confidence: 0.9,
+			Reasoning:  "High-risk process spawning pattern — unexpected parent-child relationship",
+		},
 	}
 }

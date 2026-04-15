@@ -100,6 +100,7 @@ func (s *Server) SubmitJobEvents(ctx context.Context, req *pb.SubmitJobEventsReq
 	if record.Metadata != nil {
 		metadata = ingestion.JobMetadata{
 			Repository:   record.Metadata.Repository,
+			JobName:      record.Metadata.JobName,
 			WorkflowName: record.Metadata.WorkflowName,
 			WorkflowFile: record.Metadata.WorkflowFile,
 			RunID:        record.Metadata.RunId,
@@ -159,14 +160,17 @@ func (s *Server) StreamEvents(stream pb.AgentService_StreamEventsServer) error {
 
 func fromProtoEvent(pbEvt *pb.Event) sensor.Event {
 	evt := sensor.Event{
-		ID:        pbEvt.Id,
-		Timestamp: pbEvt.Timestamp.AsTime(),
-		PID:       pbEvt.Pid,
-		ParentPID: pbEvt.ParentPid,
-		Binary:    pbEvt.BinaryPath,
-		Args:      pbEvt.Args,
-		CWD:       pbEvt.Cwd,
-		UID:       pbEvt.Uid,
+		ID:           pbEvt.Id,
+		Timestamp:    pbEvt.Timestamp.AsTime(),
+		PID:          pbEvt.Pid,
+		ParentPID:    pbEvt.ParentPid,
+		Binary:       pbEvt.BinaryPath,
+		Args:         pbEvt.Args,
+		CWD:          pbEvt.Cwd,
+		UID:          pbEvt.Uid,
+		StepName:     pbEvt.StepName,
+		StepNumber:   int(pbEvt.StepNumber),
+		ParentBinary: pbEvt.ParentBinary,
 	}
 
 	switch pbEvt.Type {

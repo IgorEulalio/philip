@@ -79,12 +79,10 @@ func run(ctx context.Context, cfg *config.AgentConfig, logger *slog.Logger) erro
 		return fmt.Errorf("unsupported sensor type: %s", cfg.Sensor.Type)
 	}
 
-	// Initialize process tree and event normalizer
+	// Initialize process tree, step correlator, and event normalizer
 	tree := collector.NewProcessTree()
-	normalizer := collector.NewEventNormalizer(tree, cfg.Runner.ProcessName, logger)
-
-	// Initialize step correlator
 	correlator := collector.NewStepCorrelator(cfg.ActionSocketPath, logger)
+	normalizer := collector.NewEventNormalizer(tree, correlator, cfg.Runner.ProcessName, logger)
 
 	// Initialize backend client
 	backendClient, err := transport.NewBackendClient(

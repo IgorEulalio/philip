@@ -20,6 +20,18 @@
         "current": { "text": "All", "value": "$__all" },
         "refresh": 2,
         "multi": true
+      },
+      {
+        "name": "job_name",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(philip_jobs_analyzed_total{repository=~\"$repository\"}, job_name)",
+        "query": "label_values(philip_jobs_analyzed_total{repository=~\"$repository\"}, job_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "multi": true
       }
     ]
   },
@@ -33,7 +45,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "count(philip_baseline_status{status=\"active\", repository=~\"$repository\"} == 1) or vector(0)",
+          "expr": "count(philip_baseline_status{status=\"active\", repository=~\"$repository\", job_name=~\"$job_name\"} == 1) or vector(0)",
           "legendFormat": "Active"
         }
       ],
@@ -53,7 +65,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "count(philip_baseline_status{status=\"learning\", repository=~\"$repository\"} == 1) or vector(0)",
+          "expr": "count(philip_baseline_status{status=\"learning\", repository=~\"$repository\", job_name=~\"$job_name\"} == 1) or vector(0)",
           "legendFormat": "Learning"
         }
       ],
@@ -73,7 +85,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(increase(philip_deviations_total{repository=~\"$repository\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(philip_deviations_total{repository=~\"$repository\", job_name=~\"$job_name\"}[$__range])) or vector(0)",
           "legendFormat": "Deviations"
         }
       ],
@@ -98,7 +110,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(increase(philip_jobs_analyzed_total{repository=~\"$repository\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(philip_jobs_analyzed_total{repository=~\"$repository\", job_name=~\"$job_name\"}[$__range])) or vector(0)",
           "legendFormat": "Jobs"
         }
       ],
@@ -111,7 +123,7 @@
     },
     {
       "id": 5,
-      "title": "Activity by Repository",
+      "title": "Activity by Repository / Job",
       "description": "Green = expected events, Red = deviations",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -124,8 +136,8 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by(repository)(rate(philip_deviations_total{repository=~\"$repository\"}[5m]))",
-          "legendFormat": "{{repository}} — deviations"
+          "expr": "sum by(repository, job_name)(rate(philip_deviations_total{repository=~\"$repository\", job_name=~\"$job_name\"}[5m]))",
+          "legendFormat": "{{repository}}/{{job_name}} — deviations"
         }
       ],
       "fieldConfig": {
@@ -151,29 +163,29 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_baseline_status{repository=~\"$repository\"} == 1",
-          "legendFormat": "{{repository}} {{status}}",
+          "expr": "philip_baseline_status{repository=~\"$repository\", job_name=~\"$job_name\"} == 1",
+          "legendFormat": "{{repository}}/{{job_name}} {{status}}",
           "format": "table",
           "instant": true
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_baseline_jobs_observed{repository=~\"$repository\"}",
-          "legendFormat": "{{repository}} jobs",
+          "expr": "philip_baseline_jobs_observed{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "legendFormat": "{{repository}}/{{job_name}} jobs",
           "format": "table",
           "instant": true
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_baseline_process_profiles{repository=~\"$repository\"}",
-          "legendFormat": "{{repository}} processes",
+          "expr": "philip_baseline_process_profiles{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "legendFormat": "{{repository}}/{{job_name}} processes",
           "format": "table",
           "instant": true
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_baseline_network_profiles{repository=~\"$repository\"}",
-          "legendFormat": "{{repository}} networks",
+          "expr": "philip_baseline_network_profiles{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "legendFormat": "{{repository}}/{{job_name}} networks",
           "format": "table",
           "instant": true
         }
@@ -186,6 +198,7 @@
             "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
             "renameByName": {
               "repository": "Repository",
+              "job_name": "Job",
               "status": "Status",
               "Value #A": "Status Active",
               "Value #B": "Jobs Observed",
@@ -205,7 +218,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by(verdict)(increase(philip_jobs_analyzed_total{repository=~\"$repository\"}[24h]))",
+          "expr": "sum by(verdict)(increase(philip_jobs_analyzed_total{repository=~\"$repository\", job_name=~\"$job_name\"}[24h]))",
           "legendFormat": "{{verdict}}"
         }
       ],

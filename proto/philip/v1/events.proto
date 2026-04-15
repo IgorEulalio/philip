@@ -40,6 +40,13 @@ message Event {
 
   // File access fields
   FileAccessEvent file_access = 13;
+
+  // Step context — populated by agent from StepCorrelator
+  string step_name = 14;
+  int32 step_number = 15;
+
+  // Parent binary path — populated by agent from ProcessTree
+  string parent_binary = 16;
 }
 
 message ProcessExecEvent {
@@ -104,4 +111,5 @@ message JobMetadata {
   string trigger_event = 8;    // "push", "pull_request", "schedule", etc.
   string runner_name = 9;
   string runner_os = 10;
+  string job_name = 11;        // e.g. "build", "test", "deploy" — baseline key component
 }

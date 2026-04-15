@@ -23,7 +23,7 @@ type StoreInterface interface {
 		exitCode int, durationMs int64) error
 
 	// Baselines
-	GetBaseline(ctx context.Context, repository string) (*BaselineRecord, error)
+	GetBaseline(ctx context.Context, repository, workflowFile, jobName string) (*BaselineRecord, error)
 	UpsertBaseline(ctx context.Context, b *BaselineRecord) error
 
 	// Findings

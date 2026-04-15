@@ -24,8 +24,12 @@ func newMockStore() *mockStore {
 	}
 }
 
-func (m *mockStore) GetBaseline(_ context.Context, repository string) (*storage.BaselineRecord, error) {
-	b, ok := m.baselines[repository]
+func baselineKey(repository, workflowFile, jobName string) string {
+	return repository + "/" + workflowFile + "/" + jobName
+}
+
+func (m *mockStore) GetBaseline(_ context.Context, repository, workflowFile, jobName string) (*storage.BaselineRecord, error) {
+	b, ok := m.baselines[baselineKey(repository, workflowFile, jobName)]
 	if !ok {
 		return nil, nil
 	}
@@ -33,7 +37,7 @@ func (m *mockStore) GetBaseline(_ context.Context, repository string) (*storage.
 }
 
 func (m *mockStore) UpsertBaseline(_ context.Context, b *storage.BaselineRecord) error {
-	m.baselines[b.Repository] = b
+	m.baselines[baselineKey(b.Repository, b.WorkflowFile, b.JobName)] = b
 	return nil
 }
 
@@ -61,7 +65,7 @@ func TestEngine_UpdateBaseline_NewRepository(t *testing.T) {
 		{Type: sensor.EventTypeNetworkConnect, Binary: "/usr/bin/npm", DestIP: parseIP("104.16.0.1"), DestPort: 443},
 	}
 
-	bl, err := engine.UpdateBaseline(context.Background(), "owner/repo", events)
+	bl, err := engine.UpdateBaseline(context.Background(), "owner/repo", ".github/workflows/ci.yml", "build", events)
 	if err != nil {
 		t.Fatalf("UpdateBaseline failed: %v", err)
 	}
@@ -94,7 +98,7 @@ func TestEngine_UpdateBaseline_LearningToActive(t *testing.T) {
 
 	// Run 9 jobs — should stay in learning
 	for i := 0; i < 9; i++ {
-		bl, err := engine.UpdateBaseline(context.Background(), "owner/repo", events)
+		bl, err := engine.UpdateBaseline(context.Background(), "owner/repo", ".github/workflows/ci.yml", "build", events)
 		if err != nil {
 			t.Fatalf("UpdateBaseline failed on job %d: %v", i, err)
 		}
@@ -104,7 +108,7 @@ func TestEngine_UpdateBaseline_LearningToActive(t *testing.T) {
 	}
 
 	// Job 10 should transition to active
-	bl, err := engine.UpdateBaseline(context.Background(), "owner/repo", events)
+	bl, err := engine.UpdateBaseline(context.Background(), "owner/repo", ".github/workflows/ci.yml", "build", events)
 	if err != nil {
 		t.Fatalf("UpdateBaseline failed: %v", err)
 	}
@@ -126,7 +130,7 @@ func TestEngine_UpdateBaseline_ProcessFrequencyUpdates(t *testing.T) {
 		{Type: sensor.EventTypeProcessExec, Binary: "/usr/bin/npm"},
 		{Type: sensor.EventTypeProcessExec, Binary: "/usr/bin/node"},
 	}
-	bl, _ := engine.UpdateBaseline(context.Background(), "owner/repo", events1)
+	bl, _ := engine.UpdateBaseline(context.Background(), "owner/repo", ".github/workflows/ci.yml", "build", events1)
 	if len(bl.ProcessProfiles) != 2 {
 		t.Fatalf("expected 2 process profiles, got %d", len(bl.ProcessProfiles))
 	}
@@ -135,7 +139,7 @@ func TestEngine_UpdateBaseline_ProcessFrequencyUpdates(t *testing.T) {
 	events2 := []sensor.Event{
 		{Type: sensor.EventTypeProcessExec, Binary: "/usr/bin/npm"},
 	}
-	bl, _ = engine.UpdateBaseline(context.Background(), "owner/repo", events2)
+	bl, _ = engine.UpdateBaseline(context.Background(), "owner/repo", ".github/workflows/ci.yml", "build", events2)
 
 	// npm should have higher frequency than node
 	npmProfile := bl.FindProcessProfile("/usr/bin/npm")
@@ -162,7 +166,7 @@ func TestEngine_UpdateBaseline_NetworkProfiles(t *testing.T) {
 		{Type: sensor.EventTypeNetworkConnect, DestIP: parseIP("104.16.0.1"), DestPort: 80},
 	}
 
-	bl, _ := engine.UpdateBaseline(context.Background(), "owner/repo", events)
+	bl, _ := engine.UpdateBaseline(context.Background(), "owner/repo", ".github/workflows/ci.yml", "build", events)
 
 	if len(bl.NetworkProfiles) != 1 {
 		t.Fatalf("expected 1 network profile (same IP), got %d", len(bl.NetworkProfiles))
@@ -190,7 +194,7 @@ func TestEngine_UpdateBaseline_SkipsNonProcessNetworkEvents(t *testing.T) {
 		{Type: sensor.EventTypeFileAccess, Binary: "/usr/bin/cat", FilePath: "/etc/hosts"},
 	}
 
-	bl, _ := engine.UpdateBaseline(context.Background(), "owner/repo", events)
+	bl, _ := engine.UpdateBaseline(context.Background(), "owner/repo", ".github/workflows/ci.yml", "build", events)
 
 	if len(bl.ProcessProfiles) != 0 {
 		t.Errorf("expected 0 process profiles from exit events, got %d", len(bl.ProcessProfiles))
