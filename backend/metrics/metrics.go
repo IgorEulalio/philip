@@ -3,6 +3,8 @@ package metrics
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
+	// --- Counters (cumulative totals) ---
+
 	// EventsIngested counts total events ingested, labeled by repository and event type.
 	EventsIngested = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "philip_events_ingested_total",
@@ -15,41 +17,10 @@ var (
 		Help: "Jobs analyzed by verdict",
 	}, []string{"repository", "job_name", "verdict"})
 
-	// BaselineStatus tracks baseline status per job (1 for current status, 0 otherwise).
-	BaselineStatus = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_baseline_status",
-		Help: "Baseline status per job (1=current, 0=not)",
-	}, []string{"repository", "job_name", "status"})
-
-	// BaselineJobsObserved tracks total jobs observed per baseline.
-	BaselineJobsObserved = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_baseline_jobs_observed",
-		Help: "Total jobs observed in baseline",
-	}, []string{"repository", "job_name"})
-
-	// BaselineProcessProfiles tracks number of process profiles per baseline.
-	BaselineProcessProfiles = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_baseline_process_profiles",
-		Help: "Number of process profiles in baseline",
-	}, []string{"repository", "job_name"})
-
-	// BaselineNetworkProfiles tracks number of network profiles per baseline.
-	BaselineNetworkProfiles = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_baseline_network_profiles",
-		Help: "Number of network profiles in baseline",
-	}, []string{"repository", "job_name"})
-
 	// DeviationsTotal counts deviations detected, labeled by repository, job name, and type.
 	DeviationsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "philip_deviations_total",
 		Help: "Total deviations detected",
-	}, []string{"repository", "job_name", "type"})
-
-	// DeviationScore tracks the distribution of deviation scores.
-	DeviationScore = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "philip_deviation_score",
-		Help:    "Distribution of deviation scores",
-		Buckets: []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0},
 	}, []string{"repository", "job_name", "type"})
 
 	// FindingsTotal counts findings stored, labeled by repository, verdict, and severity.
@@ -76,21 +47,129 @@ var (
 		Help: "Total alerts deduplicated",
 	}, []string{"repository"})
 
+	// --- Histogram ---
+
+	// DeviationScore tracks the distribution of deviation scores.
+	DeviationScore = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "philip_deviation_score",
+		Help:    "Distribution of deviation scores",
+		Buckets: []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0},
+	}, []string{"repository", "job_name", "type"})
+
+	// --- Gauges (baseline state) ---
+
+	// BaselineStatus tracks baseline status per job (1 for current status, 0 otherwise).
+	BaselineStatus = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_baseline_status",
+		Help: "Baseline status per job (1=current, 0=not)",
+	}, []string{"repository", "job_name", "status"})
+
+	// BaselineJobsObserved tracks total jobs observed per baseline.
+	BaselineJobsObserved = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_baseline_jobs_observed",
+		Help: "Total jobs observed in baseline",
+	}, []string{"repository", "job_name"})
+
+	// BaselineProcessProfiles tracks number of process profiles per baseline.
+	BaselineProcessProfiles = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_baseline_process_profiles",
+		Help: "Number of process profiles in baseline",
+	}, []string{"repository", "job_name"})
+
+	// BaselineNetworkProfiles tracks number of network profiles per baseline.
+	BaselineNetworkProfiles = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_baseline_network_profiles",
+		Help: "Number of network profiles in baseline",
+	}, []string{"repository", "job_name"})
+
+	// --- Gauges (latest execution state per job) ---
+
+	// JobLastTimestamp is the unix timestamp of the last analyzed execution.
+	JobLastTimestamp = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_last_timestamp_seconds",
+		Help: "Unix timestamp of the last analyzed execution",
+	}, []string{"repository", "job_name"})
+
+	// JobLastVerdict is the numeric verdict of the last execution.
+	// 0=clean, 1=benign, 2=suspicious, 3=critical, 4=low_confidence
+	JobLastVerdict = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_last_verdict",
+		Help: "Verdict of the last execution (0=clean, 1=benign, 2=suspicious, 3=critical)",
+	}, []string{"repository", "job_name"})
+
+	// JobLastEventCount is the number of events in the last execution.
+	JobLastEventCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_last_event_count",
+		Help: "Number of events in the last execution",
+	}, []string{"repository", "job_name"})
+
+	// JobLastDeviationCount is the number of deviations in the last execution.
+	JobLastDeviationCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_last_deviation_count",
+		Help: "Number of deviations in the last execution",
+	}, []string{"repository", "job_name"})
+
+	// JobLastSeverity is the numeric severity of the last execution.
+	// 0=none, 1=low, 2=medium, 3=high, 4=critical
+	JobLastSeverity = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_last_severity",
+		Help: "Severity of the last execution (0=none, 1=low, 2=medium, 3=high, 4=critical)",
+	}, []string{"repository", "job_name"})
+
 	allCollectors = []prometheus.Collector{
 		EventsIngested,
 		JobsAnalyzed,
-		BaselineStatus,
-		BaselineJobsObserved,
-		BaselineProcessProfiles,
-		BaselineNetworkProfiles,
 		DeviationsTotal,
-		DeviationScore,
 		FindingsTotal,
 		TriageVerdicts,
 		AlertsRouted,
 		AlertsDeduplicated,
+		DeviationScore,
+		BaselineStatus,
+		BaselineJobsObserved,
+		BaselineProcessProfiles,
+		BaselineNetworkProfiles,
+		JobLastTimestamp,
+		JobLastVerdict,
+		JobLastEventCount,
+		JobLastDeviationCount,
+		JobLastSeverity,
 	}
 )
+
+// VerdictToNumeric converts a verdict string to a numeric value for gauges.
+func VerdictToNumeric(verdict string) float64 {
+	switch verdict {
+	case "clean":
+		return 0
+	case "benign":
+		return 1
+	case "suspicious":
+		return 2
+	case "critical":
+		return 3
+	case "low_confidence":
+		return 4
+	default:
+		return -1
+	}
+}
+
+// SeverityToNumeric converts a severity string to a numeric value for gauges.
+func SeverityToNumeric(severity string) float64 {
+	switch severity {
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	case "critical":
+		return 4
+	default:
+		return 0
+	}
+}
 
 // Register registers all Philip metrics with the default Prometheus registry.
 func Register() {

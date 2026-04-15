@@ -38,22 +38,42 @@ jobs:
         run: |
           echo "Installing project dependencies..."
           curl -sf https://registry.npmjs.org/express > /dev/null 2>&1 || true
+          curl -sf https://pypi.org/simple/requests/ > /dev/null 2>&1 || true
+          wget -q -O /dev/null https://registry.npmjs.org/lodash 2>/dev/null || true
+          git --version
+          python3 --version 2>/dev/null || true
           sleep 1
 
       - name: "Build"
         if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
+        env:
+          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
         run: |
           echo "Building project..."
           go vet ./... 2>/dev/null || true
+          go build -o /tmp/philip-build-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
           ls -la
+          find . -name "*.go" -type f | head -20 | xargs wc -l 2>/dev/null || true
+          rm -f /tmp/philip-build-${{ github.run_id }}
           echo "Build complete"
 
       - name: "Run tests"
         if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
+        env:
+          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
         run: |
           echo "Running tests..."
           go test ./backend/detection/... -count=1 -short 2>/dev/null || true
+          go test ./backend/baseline/... -count=1 -short 2>/dev/null || true
           echo "Tests complete"
+
+      - name: "Lint and check"
+        if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
+        run: |
+          echo "Running linters..."
+          gofmt -l ./backend/ 2>/dev/null || true
+          go vet ./backend/... 2>/dev/null || true
+          echo "Lint complete"
 
       # =============================================================
       # ATTACK — simulated supply chain attack
