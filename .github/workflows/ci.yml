@@ -20,8 +20,17 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install protoc
+        run: |
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
       - name: Download dependencies
         run: go mod download
+
+      - name: Generate proto
+        run: make proto
 
       - name: Vet
         run: go vet ./...
@@ -39,6 +48,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate proto
+        run: make proto
 
       - name: Build agent
         run: go build -o bin/philip-agent ./agent/cmd/philip-agent

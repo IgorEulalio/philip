@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philip-ai/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/agent/sensor"
 )
 
 func TestEventNormalizer_IsRunnerProcess(t *testing.T) {

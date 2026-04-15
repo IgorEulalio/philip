@@ -6,8 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/philip-ai/philip/agent/sensor"
-	"github.com/philip-ai/philip/backend/storage"
+	"github.com/IgorEulalio/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/backend/metrics"
+	"github.com/IgorEulalio/philip/backend/storage"
 )
 
 // Handler processes incoming job event records from agents.
@@ -86,6 +87,11 @@ func (h *Handler) IngestJobRecord(ctx context.Context, jobID string, metadata Jo
 		if err != nil {
 			h.logger.Warn("failed to store event", "event_id", evt.ID, "error", err)
 		}
+	}
+
+	// Record ingestion metrics
+	for _, evt := range events {
+		metrics.EventsIngested.WithLabelValues(metadata.Repository, evt.Type.String()).Inc()
 	}
 
 	// Notify that this job is ready for baseline update and analysis

@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/philip-ai/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/agent/sensor"
 )
 
 // EventNormalizer receives raw sensor events, filters them to the runner's

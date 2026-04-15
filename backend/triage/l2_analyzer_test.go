@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/philip-ai/philip/agent/sensor"
-	"github.com/philip-ai/philip/backend/baseline"
-	"github.com/philip-ai/philip/backend/detection"
+	"github.com/IgorEulalio/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/backend/baseline"
+	"github.com/IgorEulalio/philip/backend/detection"
 )
 
 // mockLLMProvider implements LLMProvider for testing.

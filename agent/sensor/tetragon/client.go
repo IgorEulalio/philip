@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/philip-ai/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/agent/sensor"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/philip-ai/philip/backend/alerting"
+	"github.com/IgorEulalio/philip/backend/alerting"
 )
 
 // Webhook sends alerts to a generic webhook endpoint as JSON.

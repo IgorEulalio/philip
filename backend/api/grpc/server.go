@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/philip-ai/philip/agent/sensor"
-	"github.com/philip-ai/philip/backend/ingestion"
-	"github.com/philip-ai/philip/backend/storage"
-	pb "github.com/philip-ai/philip/pkg/proto/philip/v1"
+	"github.com/IgorEulalio/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/backend/ingestion"
+	"github.com/IgorEulalio/philip/backend/storage"
+	pb "github.com/IgorEulalio/philip/pkg/proto/philip/v1"
 	"google.golang.org/grpc"
 )
 

@@ -3,7 +3,7 @@ package collector
 import (
 	"testing"
 
-	"github.com/philip-ai/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/agent/sensor"
 )
 
 func TestProcessTree_HandleEvent(t *testing.T) {

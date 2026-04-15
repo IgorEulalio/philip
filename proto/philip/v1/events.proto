@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package philip.v1;
 
-option go_package = "github.com/philip-ai/philip/pkg/proto/philip/v1";
+option go_package = "github.com/IgorEulalio/philip/pkg/proto/philip/v1";
 
 import "google/protobuf/timestamp.proto";
 

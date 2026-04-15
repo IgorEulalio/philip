@@ -9,8 +9,8 @@ import (
 
 	"net"
 
-	"github.com/philip-ai/philip/agent/sensor"
-	"github.com/philip-ai/philip/backend/storage"
+	"github.com/IgorEulalio/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/backend/storage"
 )
 
 // mockStore implements storage.StoreInterface for testing.

@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/philip-ai/philip/backend/detection"
+	"github.com/IgorEulalio/philip/backend/detection"
 )
 
 // L1Classifier is a fast, rule-based classifier that filters obvious

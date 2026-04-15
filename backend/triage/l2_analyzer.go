@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/philip-ai/philip/backend/detection"
+	"github.com/IgorEulalio/philip/backend/detection"
 )
 
 // L2Analyzer performs deep contextual analysis using an LLM provider.

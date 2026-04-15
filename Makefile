@@ -20,7 +20,7 @@ PROTO_OUT=pkg/proto
 LDFLAGS=-ldflags "-s -w"
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
-LDFLAGS=-ldflags "-s -w -X github.com/philip-ai/philip/internal/version.Version=$(VERSION) -X github.com/philip-ai/philip/internal/version.BuildTime=$(BUILD_TIME)"
+LDFLAGS=-ldflags "-s -w -X github.com/IgorEulalio/philip/internal/version.Version=$(VERSION) -X github.com/IgorEulalio/philip/internal/version.BuildTime=$(BUILD_TIME)"
 
 all: build
 

@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/philip-ai/philip/agent/sensor"
-	"github.com/philip-ai/philip/backend/detection"
+	"github.com/IgorEulalio/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/backend/detection"
 )
 
 func newTestLogger() *slog.Logger {

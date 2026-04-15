@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philip-ai/philip/backend/alerting"
+	"github.com/IgorEulalio/philip/backend/alerting"
 )
 
 // Slack sends alerts to a Slack channel via webhook.

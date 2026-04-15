@@ -6,8 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/philip-ai/philip/backend/detection"
-	"github.com/philip-ai/philip/backend/triage"
+	"github.com/IgorEulalio/philip/backend/detection"
+	"github.com/IgorEulalio/philip/backend/metrics"
+	"github.com/IgorEulalio/philip/backend/triage"
 )
 
 // Alert represents a security alert to be sent to integrations.
@@ -54,6 +55,7 @@ func (r *Router) Route(alert Alert) error {
 	dedupKey := fmt.Sprintf("%s:%s:%s", alert.Repository, alert.Severity, deviationTypesKey(alert.Deviations))
 	if r.dedup.isDuplicate(dedupKey) {
 		r.logger.Info("alert deduplicated", "repository", alert.Repository, "severity", alert.Severity)
+		metrics.AlertsDeduplicated.WithLabelValues(alert.Repository).Inc()
 		return nil
 	}
 	r.dedup.record(dedupKey)
@@ -77,6 +79,7 @@ func (r *Router) Route(alert Alert) error {
 	if len(errs) > 0 {
 		return fmt.Errorf("failed to send alert to %d/%d integrations", len(errs), len(r.integrations))
 	}
+	metrics.AlertsRouted.WithLabelValues(alert.Repository, alert.Severity).Inc()
 	return nil
 }
 

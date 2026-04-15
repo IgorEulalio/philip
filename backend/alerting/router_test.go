@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philip-ai/philip/backend/detection"
-	"github.com/philip-ai/philip/backend/triage"
+	"github.com/IgorEulalio/philip/backend/detection"
+	"github.com/IgorEulalio/philip/backend/triage"
 )
 
 // mockIntegration records alerts sent to it.

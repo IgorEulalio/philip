@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/philip-ai/philip/agent/sensor"
-	"github.com/philip-ai/philip/backend/baseline"
+	"github.com/IgorEulalio/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/backend/baseline"
 )
 
 func TestScorer_ScoreJob_LearningMode(t *testing.T) {

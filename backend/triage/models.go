@@ -1,8 +1,8 @@
 package triage
 
 import (
-	"github.com/philip-ai/philip/backend/baseline"
-	"github.com/philip-ai/philip/backend/detection"
+	"github.com/IgorEulalio/philip/backend/baseline"
+	"github.com/IgorEulalio/philip/backend/detection"
 )
 
 // Verdict represents the triage outcome.

@@ -1,0 +1,217 @@
+{
+  "uid": "philip-activity-fingerprint",
+  "title": "Philip — Activity Fingerprint",
+  "description": "Per-repo/job activity with expected (green) vs deviations (red)",
+  "tags": ["philip"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "repository",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(philip_events_ingested_total, repository)",
+        "query": "label_values(philip_events_ingested_total, repository)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active Baselines",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "count(philip_baseline_status{status=\"active\", repository=~\"$repository\"} == 1) or vector(0)",
+          "legendFormat": "Active"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Learning Baselines",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "count(philip_baseline_status{status=\"learning\", repository=~\"$repository\"} == 1) or vector(0)",
+          "legendFormat": "Learning"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "yellow" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Deviations (range)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(philip_deviations_total{repository=~\"$repository\"}[$__range])) or vector(0)",
+          "legendFormat": "Deviations"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Jobs Analyzed (range)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(philip_jobs_analyzed_total{repository=~\"$repository\"}[$__range])) or vector(0)",
+          "legendFormat": "Jobs"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Activity by Repository",
+      "description": "Green = expected events, Red = deviations",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by(repository)(rate(philip_events_ingested_total{repository=~\"$repository\"}[5m]))",
+          "legendFormat": "{{repository}} — events"
+        },
+        {
+          "expr": "sum by(repository)(rate(philip_deviations_total{repository=~\"$repository\"}[5m]))",
+          "legendFormat": "{{repository}} — deviations"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "stacking": { "mode": "normal" } } },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*events" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*deviations" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Baseline Health",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "philip_baseline_status{repository=~\"$repository\"} == 1",
+          "legendFormat": "{{repository}} {{status}}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "philip_baseline_jobs_observed{repository=~\"$repository\"}",
+          "legendFormat": "{{repository}} jobs",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "philip_baseline_process_profiles{repository=~\"$repository\"}",
+          "legendFormat": "{{repository}} processes",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "philip_baseline_network_profiles{repository=~\"$repository\"}",
+          "legendFormat": "{{repository}} networks",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "merge" },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
+            "renameByName": {
+              "repository": "Repository",
+              "status": "Status",
+              "Value #A": "Status Active",
+              "Value #B": "Jobs Observed",
+              "Value #C": "Process Profiles",
+              "Value #D": "Network Profiles"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Jobs by Verdict",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum by(verdict)(increase(philip_jobs_analyzed_total{repository=~\"$repository\"}[24h]))",
+          "legendFormat": "{{verdict}}"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "clean" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "benign" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "suspicious" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "critical" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      }
+    }
+  ],
+  "schemaVersion": 39
+}

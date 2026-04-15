@@ -3,7 +3,7 @@ package collector
 import (
 	"sync"
 
-	"github.com/philip-ai/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/agent/sensor"
 )
 
 // ProcessNode represents a single process in the tree.

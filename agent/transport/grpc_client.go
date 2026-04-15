@@ -6,13 +6,13 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/philip-ai/philip/agent/collector"
-	"github.com/philip-ai/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/agent/collector"
+	"github.com/IgorEulalio/philip/agent/sensor"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/philip-ai/philip/pkg/proto/philip/v1"
+	pb "github.com/IgorEulalio/philip/pkg/proto/philip/v1"
 )
 
 // BackendClient ships job event records to the Philip backend.

@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/philip-ai/philip/agent/collector"
-	"github.com/philip-ai/philip/agent/config"
-	"github.com/philip-ai/philip/agent/sensor"
-	"github.com/philip-ai/philip/agent/sensor/tetragon"
-	"github.com/philip-ai/philip/agent/transport"
+	"github.com/IgorEulalio/philip/agent/collector"
+	"github.com/IgorEulalio/philip/agent/config"
+	"github.com/IgorEulalio/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/agent/sensor/tetragon"
+	"github.com/IgorEulalio/philip/agent/transport"
 )
 
 func main() {

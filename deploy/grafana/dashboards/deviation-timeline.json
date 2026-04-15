@@ -1,0 +1,177 @@
+{
+  "uid": "philip-deviation-timeline",
+  "title": "Philip — Deviation Timeline",
+  "description": "Chronological deviations color-coded by severity",
+  "tags": ["philip"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "repository",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(philip_events_ingested_total, repository)",
+        "query": "label_values(philip_events_ingested_total, repository)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Deviation Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by(repository, type)(rate(philip_deviations_total{repository=~\"$repository\"}[5m]))",
+          "legendFormat": "{{repository}} — {{type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20 }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Score Distribution",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by(le)(rate(philip_deviation_score_bucket{repository=~\"$repository\"}[1h]))",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ],
+      "options": {
+        "color": { "scheme": "Oranges" },
+        "yAxis": { "unit": "short" }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Triage Verdicts",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by(source, verdict)(increase(philip_triage_verdicts_total{repository=~\"$repository\"}[1h]))",
+          "legendFormat": "{{source}} — {{verdict}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "stacking": { "mode": "normal" } }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "l1.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "l2.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Findings by Severity",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by(severity)(increase(philip_findings_total{repository=~\"$repository\"}[5m]))",
+          "legendFormat": "{{severity}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 40 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "low" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "medium" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "high" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "critical" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Recent Findings",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum by(repository, verdict, severity)(increase(philip_findings_total{repository=~\"$repository\"}[1h])) > 0",
+          "legendFormat": "{{repository}} {{verdict}} {{severity}}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
+            "renameByName": {
+              "repository": "Repository",
+              "verdict": "Verdict",
+              "severity": "Severity",
+              "Value": "Count"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Severity" },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "low": { "color": "green", "text": "low" } } },
+                  { "type": "value", "options": { "medium": { "color": "yellow", "text": "medium" } } },
+                  { "type": "value", "options": { "high": { "color": "orange", "text": "high" } } },
+                  { "type": "value", "options": { "critical": { "color": "red", "text": "critical" } } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "schemaVersion": 39
+}

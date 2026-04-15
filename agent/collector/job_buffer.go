@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/philip-ai/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/agent/sensor"
 )
 
 // JobEventRecord is the complete record of all events during a single CI/CD job run.

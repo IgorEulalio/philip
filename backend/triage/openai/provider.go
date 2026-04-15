@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/philip-ai/philip/backend/triage"
+	"github.com/IgorEulalio/philip/backend/triage"
 )
 
 const (

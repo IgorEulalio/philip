@@ -12,16 +12,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/philip-ai/philip/agent/sensor"
-	"github.com/philip-ai/philip/backend/alerting"
-	"github.com/philip-ai/philip/backend/alerting/integrations"
-	grpcserver "github.com/philip-ai/philip/backend/api/grpc"
-	"github.com/philip-ai/philip/backend/baseline"
-	"github.com/philip-ai/philip/backend/detection"
-	"github.com/philip-ai/philip/backend/ingestion"
-	"github.com/philip-ai/philip/backend/storage"
-	"github.com/philip-ai/philip/backend/triage"
-	"github.com/philip-ai/philip/backend/triage/openai"
+	"github.com/IgorEulalio/philip/agent/sensor"
+	"github.com/IgorEulalio/philip/backend/alerting"
+	"github.com/IgorEulalio/philip/backend/alerting/integrations"
+	grpcserver "github.com/IgorEulalio/philip/backend/api/grpc"
+	"github.com/IgorEulalio/philip/backend/baseline"
+	"github.com/IgorEulalio/philip/backend/detection"
+	"github.com/IgorEulalio/philip/backend/ingestion"
+	"github.com/IgorEulalio/philip/backend/metrics"
+	"github.com/IgorEulalio/philip/backend/storage"
+	"github.com/IgorEulalio/philip/backend/triage"
+	"github.com/IgorEulalio/philip/backend/triage/openai"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // ServerConfig holds backend server configuration.
@@ -127,6 +129,9 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 	}
 	logger.Info("database migrations complete")
 
+	// Register Prometheus metrics
+	metrics.Register()
+
 	// Initialize components
 	baselineEngine := baseline.NewEngine(store, logger)
 	scorer := detection.NewScorer(logger)
@@ -173,10 +178,25 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 			return
 		}
 
+		// Update baseline metrics
+		metrics.BaselineStatus.WithLabelValues(repository, "learning").Set(0)
+		metrics.BaselineStatus.WithLabelValues(repository, "active").Set(0)
+		metrics.BaselineStatus.WithLabelValues(repository, bl.Status).Set(1)
+		metrics.BaselineJobsObserved.WithLabelValues(repository).Set(float64(bl.TotalJobsObserved))
+		metrics.BaselineProcessProfiles.WithLabelValues(repository).Set(float64(len(bl.ProcessProfiles)))
+		metrics.BaselineNetworkProfiles.WithLabelValues(repository).Set(float64(len(bl.NetworkProfiles)))
+
 		// Score deviations
 		deviations := scorer.ScoreJob(bl, events)
 		if len(deviations) == 0 {
+			metrics.JobsAnalyzed.WithLabelValues(repository, "clean").Inc()
 			return
+		}
+
+		// Record deviation metrics
+		for _, dev := range deviations {
+			metrics.DeviationsTotal.WithLabelValues(repository, string(dev.DeviationType)).Inc()
+			metrics.DeviationScore.WithLabelValues(repository, string(dev.DeviationType)).Observe(dev.Score)
 		}
 
 		logger.Info("deviations detected",
@@ -193,8 +213,12 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 
 		// L1 classification
 		l1Result := l1.Classify(triageReq)
+		if l1Result != nil {
+			metrics.TriageVerdicts.WithLabelValues(repository, "l1", string(l1Result.Verdict)).Inc()
+		}
 		if l1Result != nil && l1Result.Verdict == triage.VerdictBenign {
 			logger.Info("L1 classified all deviations as benign", "repository", repository)
+			metrics.JobsAnalyzed.WithLabelValues(repository, "benign").Inc()
 			return
 		}
 
@@ -209,6 +233,7 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 				return
 			}
 			finalResult = result.Final
+			metrics.TriageVerdicts.WithLabelValues(repository, "l2", string(finalResult.Verdict)).Inc()
 		} else if l1Result != nil {
 			finalResult = l1Result
 		} else {
@@ -223,12 +248,14 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 
 		// Only alert on suspicious or critical with sufficient confidence
 		if finalResult.Verdict == triage.VerdictBenign {
+			metrics.JobsAnalyzed.WithLabelValues(repository, "benign").Inc()
 			return
 		}
 		if finalResult.Confidence < 0.6 {
 			logger.Info("low confidence finding, not alerting",
 				"verdict", finalResult.Verdict,
 				"confidence", finalResult.Confidence)
+			metrics.JobsAnalyzed.WithLabelValues(repository, "low_confidence").Inc()
 			return
 		}
 
@@ -248,6 +275,7 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		if err := store.InsertFinding(analyzeCtx, finding); err != nil {
 			logger.Error("failed to store finding", "error", err)
 		}
+		metrics.FindingsTotal.WithLabelValues(repository, string(finalResult.Verdict), finalResult.Severity).Inc()
 
 		// Route alert
 		alert := alerting.Alert{
@@ -266,6 +294,7 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		if err := alertRouter.Route(alert); err != nil {
 			logger.Error("failed to route alert", "error", err)
 		}
+		metrics.JobsAnalyzed.WithLabelValues(repository, string(finalResult.Verdict)).Inc()
 	}
 
 	// Initialize ingestion handler
@@ -315,6 +344,8 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(findings)
 	})
+
+	restMux.Handle("/metrics", promhttp.Handler())
 
 	httpSrv := &http.Server{Addr: cfg.RESTAddress, Handler: restMux}
 	go func() {
