@@ -22,13 +22,13 @@ jobs:
     name: "E2E (${{ inputs.scenario }} #${{ inputs.iteration }})"
     runs-on: [self-hosted, philip]
     steps:
+      - uses: actions/checkout@v4
+
       # --- Philip monitoring starts here ---
       - name: Philip monitor start
         uses: ./action
         with:
           mode: monitor
-
-      - uses: actions/checkout@v4
 
       # =============================================================
       # BASELINE — normal CI/CD behavior
