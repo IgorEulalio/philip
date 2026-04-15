@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net"
+	"os"
 	"sync"
 )
 
@@ -78,11 +79,19 @@ func (sc *StepCorrelator) CurrentStep() string {
 
 // ListenAndServe starts the unix socket server that receives metadata from the GitHub Action.
 func (sc *StepCorrelator) ListenAndServe() error {
+	// Remove stale socket file if it exists
+	os.Remove(sc.socketPath)
+
 	listener, err := net.Listen("unix", sc.socketPath)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
+
+	// Make socket world-writable so the runner (ec2-user) can connect
+	if err := os.Chmod(sc.socketPath, 0777); err != nil {
+		return err
+	}
 
 	for {
 		conn, err := listener.Accept()
