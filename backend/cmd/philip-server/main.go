@@ -191,22 +191,31 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		metrics.BaselineProcessProfiles.WithLabelValues(repository, jobName).Set(float64(len(bl.ProcessProfiles)))
 		metrics.BaselineNetworkProfiles.WithLabelValues(repository, jobName).Set(float64(len(bl.NetworkProfiles)))
 
-		// Update latest execution gauges (always set, regardless of verdict)
-		metrics.JobLastTimestamp.WithLabelValues(repository, jobName).Set(float64(time.Now().Unix()))
-		metrics.JobLastEventCount.WithLabelValues(repository, jobName).Set(float64(len(events)))
+		// Set per-execution gauges (always, regardless of verdict)
+		metrics.JobExecTimestamp.WithLabelValues(repository, jobName, jobID).Set(float64(time.Now().Unix()))
+		metrics.JobExecEventCount.WithLabelValues(repository, jobName, jobID).Set(float64(len(events)))
 
 		// Score deviations
 		deviations := scorer.ScoreJob(bl, events)
+
+		// Compute job-level score (max deviation score)
+		var maxScore float64
+		for _, dev := range deviations {
+			if dev.Score > maxScore {
+				maxScore = dev.Score
+			}
+		}
+		metrics.JobExecScore.WithLabelValues(repository, jobName, jobID).Set(maxScore)
+		metrics.JobExecDeviationCount.WithLabelValues(repository, jobName, jobID).Set(float64(len(deviations)))
+
 		if len(deviations) == 0 {
 			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "clean").Inc()
-			metrics.JobLastVerdict.WithLabelValues(repository, jobName).Set(metrics.VerdictToNumeric("clean"))
-			metrics.JobLastDeviationCount.WithLabelValues(repository, jobName).Set(0)
-			metrics.JobLastSeverity.WithLabelValues(repository, jobName).Set(0)
+			metrics.JobExecVerdict.WithLabelValues(repository, jobName, jobID).Set(metrics.VerdictToNumeric("clean"))
+			metrics.JobExecSeverity.WithLabelValues(repository, jobName, jobID).Set(0)
 			return
 		}
 
 		// Record deviation metrics
-		metrics.JobLastDeviationCount.WithLabelValues(repository, jobName).Set(float64(len(deviations)))
 		for _, dev := range deviations {
 			metrics.DeviationsTotal.WithLabelValues(repository, jobName, string(dev.DeviationType)).Inc()
 			metrics.DeviationScore.WithLabelValues(repository, jobName, string(dev.DeviationType)).Observe(dev.Score)
@@ -215,7 +224,8 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		logger.Info("deviations detected",
 			"repository", repository,
 			"job_name", jobName,
-			"count", len(deviations))
+			"count", len(deviations),
+			"max_score", maxScore)
 
 		// Run triage
 		triageReq := triage.TriageRequest{
@@ -234,8 +244,8 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 			logger.Info("L1 classified all deviations as benign",
 				"repository", repository, "job_name", jobName)
 			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "benign").Inc()
-			metrics.JobLastVerdict.WithLabelValues(repository, jobName).Set(metrics.VerdictToNumeric("benign"))
-			metrics.JobLastSeverity.WithLabelValues(repository, jobName).Set(metrics.SeverityToNumeric(l1Result.Severity))
+			metrics.JobExecVerdict.WithLabelValues(repository, jobName, jobID).Set(metrics.VerdictToNumeric("benign"))
+			metrics.JobExecSeverity.WithLabelValues(repository, jobName, jobID).Set(metrics.SeverityToNumeric(l1Result.Severity))
 			return
 		}
 
@@ -266,8 +276,8 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		// Only alert on suspicious or critical with sufficient confidence
 		if finalResult.Verdict == triage.VerdictBenign {
 			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "benign").Inc()
-			metrics.JobLastVerdict.WithLabelValues(repository, jobName).Set(metrics.VerdictToNumeric("benign"))
-			metrics.JobLastSeverity.WithLabelValues(repository, jobName).Set(metrics.SeverityToNumeric(finalResult.Severity))
+			metrics.JobExecVerdict.WithLabelValues(repository, jobName, jobID).Set(metrics.VerdictToNumeric("benign"))
+			metrics.JobExecSeverity.WithLabelValues(repository, jobName, jobID).Set(metrics.SeverityToNumeric(finalResult.Severity))
 			return
 		}
 		if finalResult.Confidence < 0.6 {
@@ -275,8 +285,8 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 				"verdict", finalResult.Verdict,
 				"confidence", finalResult.Confidence)
 			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "low_confidence").Inc()
-			metrics.JobLastVerdict.WithLabelValues(repository, jobName).Set(metrics.VerdictToNumeric("low_confidence"))
-			metrics.JobLastSeverity.WithLabelValues(repository, jobName).Set(metrics.SeverityToNumeric(finalResult.Severity))
+			metrics.JobExecVerdict.WithLabelValues(repository, jobName, jobID).Set(metrics.VerdictToNumeric("low_confidence"))
+			metrics.JobExecSeverity.WithLabelValues(repository, jobName, jobID).Set(metrics.SeverityToNumeric(finalResult.Severity))
 			return
 		}
 
@@ -316,8 +326,8 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 			logger.Error("failed to route alert", "error", err)
 		}
 		metrics.JobsAnalyzed.WithLabelValues(repository, jobName, string(finalResult.Verdict)).Inc()
-		metrics.JobLastVerdict.WithLabelValues(repository, jobName).Set(metrics.VerdictToNumeric(string(finalResult.Verdict)))
-		metrics.JobLastSeverity.WithLabelValues(repository, jobName).Set(metrics.SeverityToNumeric(finalResult.Severity))
+		metrics.JobExecVerdict.WithLabelValues(repository, jobName, jobID).Set(metrics.VerdictToNumeric(string(finalResult.Verdict)))
+		metrics.JobExecSeverity.WithLabelValues(repository, jobName, jobID).Set(metrics.SeverityToNumeric(finalResult.Severity))
 	}
 
 	// Initialize ingestion handler

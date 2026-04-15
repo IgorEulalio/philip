@@ -82,39 +82,45 @@ var (
 		Help: "Number of network profiles in baseline",
 	}, []string{"repository", "job_name"})
 
-	// --- Gauges (latest execution state per job) ---
+	// --- Gauges (per-execution state, keyed by job_id) ---
 
-	// JobLastTimestamp is the unix timestamp of the last analyzed execution.
-	JobLastTimestamp = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_job_last_timestamp_seconds",
-		Help: "Unix timestamp of the last analyzed execution",
-	}, []string{"repository", "job_name"})
+	// JobExecTimestamp is the unix timestamp of the execution.
+	JobExecTimestamp = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_exec_timestamp_seconds",
+		Help: "Unix timestamp of the job execution",
+	}, []string{"repository", "job_name", "job_id"})
 
-	// JobLastVerdict is the numeric verdict of the last execution.
+	// JobExecVerdict is the numeric verdict of the execution.
 	// 0=clean, 1=benign, 2=suspicious, 3=critical, 4=low_confidence
-	JobLastVerdict = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_job_last_verdict",
-		Help: "Verdict of the last execution (0=clean, 1=benign, 2=suspicious, 3=critical)",
-	}, []string{"repository", "job_name"})
+	JobExecVerdict = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_exec_verdict",
+		Help: "Verdict of the execution (0=clean, 1=benign, 2=suspicious, 3=critical)",
+	}, []string{"repository", "job_name", "job_id"})
 
-	// JobLastEventCount is the number of events in the last execution.
-	JobLastEventCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_job_last_event_count",
-		Help: "Number of events in the last execution",
-	}, []string{"repository", "job_name"})
+	// JobExecEventCount is the number of events in the execution.
+	JobExecEventCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_exec_event_count",
+		Help: "Number of events in the execution",
+	}, []string{"repository", "job_name", "job_id"})
 
-	// JobLastDeviationCount is the number of deviations in the last execution.
-	JobLastDeviationCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_job_last_deviation_count",
-		Help: "Number of deviations in the last execution",
-	}, []string{"repository", "job_name"})
+	// JobExecDeviationCount is the number of deviations in the execution.
+	JobExecDeviationCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_exec_deviation_count",
+		Help: "Number of deviations in the execution",
+	}, []string{"repository", "job_name", "job_id"})
 
-	// JobLastSeverity is the numeric severity of the last execution.
+	// JobExecScore is the highest deviation score in the execution (0.0 = clean, 1.0 = max risk).
+	JobExecScore = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_exec_score",
+		Help: "Highest deviation score in the execution (0=clean, 1=max risk)",
+	}, []string{"repository", "job_name", "job_id"})
+
+	// JobExecSeverity is the numeric severity of the execution.
 	// 0=none, 1=low, 2=medium, 3=high, 4=critical
-	JobLastSeverity = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "philip_job_last_severity",
-		Help: "Severity of the last execution (0=none, 1=low, 2=medium, 3=high, 4=critical)",
-	}, []string{"repository", "job_name"})
+	JobExecSeverity = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_job_exec_severity",
+		Help: "Severity of the execution (0=none, 1=low, 2=medium, 3=high, 4=critical)",
+	}, []string{"repository", "job_name", "job_id"})
 
 	allCollectors = []prometheus.Collector{
 		EventsIngested,
@@ -129,11 +135,12 @@ var (
 		BaselineJobsObserved,
 		BaselineProcessProfiles,
 		BaselineNetworkProfiles,
-		JobLastTimestamp,
-		JobLastVerdict,
-		JobLastEventCount,
-		JobLastDeviationCount,
-		JobLastSeverity,
+		JobExecTimestamp,
+		JobExecVerdict,
+		JobExecEventCount,
+		JobExecDeviationCount,
+		JobExecScore,
+		JobExecSeverity,
 	}
 )
 

@@ -1,7 +1,7 @@
 {
   "uid": "philip-activity-fingerprint",
-  "title": "Philip — Activity Fingerprint",
-  "description": "Per-repo/job activity overview with execution history and baseline state",
+  "title": "Philip — CI/CD Security Monitor",
+  "description": "Job execution history, scores, verdicts, and baseline state",
   "tags": ["philip"],
   "timezone": "browser",
   "editable": true,
@@ -41,7 +41,7 @@
       "title": "Jobs Analyzed",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -60,7 +60,7 @@
       "title": "Clean",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -79,7 +79,7 @@
       "title": "Suspicious",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -98,7 +98,7 @@
       "title": "Critical",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -113,61 +113,106 @@
       }
     },
     {
-      "id": 5,
-      "title": "Job Executions",
-      "description": "Latest state of each monitored job",
-      "type": "table",
+      "id": 10,
+      "title": "Baseline Status",
+      "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_last_timestamp_seconds{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "philip_baseline_jobs_observed{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "legendFormat": "{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "yellow", "value": null },
+              { "color": "green", "value": 10 }
+            ]
+          }
+        }
+      },
+      "options": { "graphMode": "none" }
+    },
+    {
+      "id": 11,
+      "title": "Baseline",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "philip_baseline_status{repository=~\"$repository\", job_name=~\"$job_name\"} == 1",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "active", "color": "green" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "yellow", "value": null }]
+          }
+        }
+      },
+      "options": { "graphMode": "none" }
+    },
+    {
+      "id": 5,
+      "title": "Job Executions",
+      "description": "Each job execution with score, verdict, and event details",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "philip_job_exec_timestamp_seconds{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_last_verdict{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "philip_job_exec_score{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_last_event_count{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "philip_job_exec_verdict{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
           "refId": "C"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_last_deviation_count{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "philip_job_exec_event_count{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
           "refId": "D"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_last_severity{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "philip_job_exec_deviation_count{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
           "refId": "E"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_baseline_status{repository=~\"$repository\", job_name=~\"$job_name\"} == 1",
+          "expr": "philip_job_exec_severity{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
           "refId": "F"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_baseline_jobs_observed{repository=~\"$repository\", job_name=~\"$job_name\"}",
-          "format": "table",
-          "instant": true,
-          "refId": "G"
         }
       ],
       "transformations": [
@@ -176,27 +221,65 @@
           "id": "organize",
           "options": {
             "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
+            "indexByName": {
+              "job_id": 0,
+              "repository": 1,
+              "job_name": 2,
+              "Value #A": 3,
+              "Value #B": 4,
+              "Value #C": 5,
+              "Value #D": 6,
+              "Value #E": 7,
+              "Value #F": 8
+            },
             "renameByName": {
+              "job_id": "Job ID",
               "repository": "Repository",
               "job_name": "Job",
-              "Value #A": "Last Run",
-              "Value #B": "Verdict",
-              "Value #C": "Events",
-              "Value #D": "Deviations",
-              "Value #E": "Severity",
-              "Value #F": "Baseline",
-              "Value #G": "Jobs Observed",
-              "status": "Baseline Status"
+              "Value #A": "Timestamp",
+              "Value #B": "Score",
+              "Value #C": "Verdict",
+              "Value #D": "Events",
+              "Value #E": "Deviations",
+              "Value #F": "Severity"
             }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [{ "field": "Timestamp", "desc": true }]
           }
         }
       ],
       "fieldConfig": {
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Last Run" },
+            "matcher": { "id": "byName", "options": "Timestamp" },
             "properties": [
               { "id": "unit", "value": "dateTimeFromNow" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Score" },
+            "properties": [
+              { "id": "decimals", "value": 2 },
+              {
+                "id": "custom.cellOptions",
+                "value": { "type": "color-text" }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 0.3 },
+                    { "color": "orange", "value": 0.6 },
+                    { "color": "red", "value": 0.85 }
+                  ]
+                }
+              }
             ]
           },
           {
@@ -209,11 +292,11 @@
               {
                 "id": "mappings",
                 "value": [
-                  { "type": "value", "options": { "0": { "color": "green", "text": "clean" } } },
-                  { "type": "value", "options": { "1": { "color": "green", "text": "benign" } } },
-                  { "type": "value", "options": { "2": { "color": "orange", "text": "suspicious" } } },
-                  { "type": "value", "options": { "3": { "color": "red", "text": "critical" } } },
-                  { "type": "value", "options": { "4": { "color": "yellow", "text": "low confidence" } } }
+                  { "type": "value", "options": { "0": { "color": "green", "text": "CLEAN" } } },
+                  { "type": "value", "options": { "1": { "color": "green", "text": "BENIGN" } } },
+                  { "type": "value", "options": { "2": { "color": "orange", "text": "SUSPICIOUS" } } },
+                  { "type": "value", "options": { "3": { "color": "red", "text": "CRITICAL" } } },
+                  { "type": "value", "options": { "4": { "color": "yellow", "text": "LOW CONFIDENCE" } } }
                 ]
               }
             ]
@@ -229,10 +312,10 @@
                 "id": "mappings",
                 "value": [
                   { "type": "value", "options": { "0": { "color": "text", "text": "-" } } },
-                  { "type": "value", "options": { "1": { "color": "green", "text": "low" } } },
-                  { "type": "value", "options": { "2": { "color": "yellow", "text": "medium" } } },
-                  { "type": "value", "options": { "3": { "color": "orange", "text": "high" } } },
-                  { "type": "value", "options": { "4": { "color": "red", "text": "critical" } } }
+                  { "type": "value", "options": { "1": { "color": "green", "text": "LOW" } } },
+                  { "type": "value", "options": { "2": { "color": "yellow", "text": "MEDIUM" } } },
+                  { "type": "value", "options": { "3": { "color": "orange", "text": "HIGH" } } },
+                  { "type": "value", "options": { "4": { "color": "red", "text": "CRITICAL" } } }
                 ]
               }
             ]
@@ -262,43 +345,83 @@
     },
     {
       "id": 6,
-      "title": "Activity Over Time",
-      "description": "Event ingestion rate and deviation rate",
+      "title": "Job Score Over Time",
+      "description": "Max deviation score per execution over time",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by(repository)(rate(philip_events_ingested_total{repository=~\"$repository\"}[5m]))",
-          "legendFormat": "{{repository}} — events"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by(repository, job_name)(rate(philip_deviations_total{repository=~\"$repository\", job_name=~\"$job_name\"}[5m]))",
-          "legendFormat": "{{repository}}/{{job_name}} — deviations"
+          "expr": "philip_job_exec_score{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "legendFormat": "{{job_id}}"
         }
       ],
       "fieldConfig": {
-        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 15 } },
+        "defaults": {
+          "custom": { "drawStyle": "points", "pointSize": 8 },
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.3 },
+              { "color": "orange", "value": 0.6 },
+              { "color": "red", "value": 0.85 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Deviation Rate by Type",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by(type)(rate(philip_deviations_total{repository=~\"$repository\", job_name=~\"$job_name\"}[5m]))",
+          "legendFormat": "{{type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 20 }
+        },
         "overrides": [
           {
-            "matcher": { "id": "byRegexp", "options": ".*events" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+            "matcher": { "id": "byName", "options": "new_process" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
           },
           {
-            "matcher": { "id": "byRegexp", "options": ".*deviations" },
+            "matcher": { "id": "byName", "options": "new_network" },
             "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "suspicious_args" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "unexpected_parent" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "sensitive_path" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
           }
         ]
       }
     },
     {
-      "id": 7,
+      "id": 8,
       "title": "Verdicts Over Time",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -324,46 +447,27 @@
           {
             "matcher": { "id": "byName", "options": "critical" },
             "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "low_confidence" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
           }
         ]
       }
     },
     {
-      "id": 8,
-      "title": "Jobs by Verdict",
-      "type": "piechart",
+      "id": 9,
+      "title": "Score Distribution",
+      "type": "heatmap",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by(verdict)(increase(philip_jobs_analyzed_total{repository=~\"$repository\", job_name=~\"$job_name\"}[24h]))",
-          "legendFormat": "{{verdict}}"
+          "expr": "sum by(le)(rate(philip_deviation_score_bucket{repository=~\"$repository\", job_name=~\"$job_name\"}[1h]))",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
         }
       ],
-      "fieldConfig": {
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "clean" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "benign" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "semi-dark-green" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "suspicious" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "critical" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
-          }
-        ]
+      "options": {
+        "color": { "scheme": "Oranges" },
+        "yAxis": { "unit": "short" }
       }
     }
   ],
