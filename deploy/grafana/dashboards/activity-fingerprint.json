@@ -28,9 +28,11 @@
       "id": 1,
       "title": "Active Baselines",
       "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "count(philip_baseline_status{status=\"active\", repository=~\"$repository\"} == 1) or vector(0)",
           "legendFormat": "Active"
         }
@@ -46,9 +48,11 @@
       "id": 2,
       "title": "Learning Baselines",
       "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "count(philip_baseline_status{status=\"learning\", repository=~\"$repository\"} == 1) or vector(0)",
           "legendFormat": "Learning"
         }
@@ -64,9 +68,11 @@
       "id": 3,
       "title": "Deviations (range)",
       "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum(increase(philip_deviations_total{repository=~\"$repository\"}[$__range])) or vector(0)",
           "legendFormat": "Deviations"
         }
@@ -87,9 +93,11 @@
       "id": 4,
       "title": "Jobs Analyzed (range)",
       "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum(increase(philip_jobs_analyzed_total{repository=~\"$repository\"}[$__range])) or vector(0)",
           "legendFormat": "Jobs"
         }
@@ -106,13 +114,16 @@
       "title": "Activity by Repository",
       "description": "Green = expected events, Red = deviations",
       "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(repository)(rate(philip_events_ingested_total{repository=~\"$repository\"}[5m]))",
           "legendFormat": "{{repository}} — events"
         },
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(repository)(rate(philip_deviations_total{repository=~\"$repository\"}[5m]))",
           "legendFormat": "{{repository}} — deviations"
         }
@@ -135,27 +146,32 @@
       "id": 6,
       "title": "Baseline Health",
       "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 14, "x": 0, "y": 14 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_baseline_status{repository=~\"$repository\"} == 1",
           "legendFormat": "{{repository}} {{status}}",
           "format": "table",
           "instant": true
         },
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_baseline_jobs_observed{repository=~\"$repository\"}",
           "legendFormat": "{{repository}} jobs",
           "format": "table",
           "instant": true
         },
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_baseline_process_profiles{repository=~\"$repository\"}",
           "legendFormat": "{{repository}} processes",
           "format": "table",
           "instant": true
         },
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_baseline_network_profiles{repository=~\"$repository\"}",
           "legendFormat": "{{repository}} networks",
           "format": "table",
@@ -184,9 +200,11 @@
       "id": 7,
       "title": "Jobs by Verdict",
       "type": "piechart",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 10, "x": 14, "y": 14 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(verdict)(increase(philip_jobs_analyzed_total{repository=~\"$repository\"}[24h]))",
           "legendFormat": "{{verdict}}"
         }

@@ -28,9 +28,11 @@
       "id": 1,
       "title": "Deviation Rate",
       "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(repository, type)(rate(philip_deviations_total{repository=~\"$repository\"}[5m]))",
           "legendFormat": "{{repository}} — {{type}}"
         }
@@ -45,9 +47,11 @@
       "id": 2,
       "title": "Score Distribution",
       "type": "heatmap",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(le)(rate(philip_deviation_score_bucket{repository=~\"$repository\"}[1h]))",
           "legendFormat": "{{le}}",
           "format": "heatmap"
@@ -62,9 +66,11 @@
       "id": 3,
       "title": "Triage Verdicts",
       "type": "barchart",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(source, verdict)(increase(philip_triage_verdicts_total{repository=~\"$repository\"}[1h]))",
           "legendFormat": "{{source}} — {{verdict}}"
         }
@@ -89,9 +95,11 @@
       "id": 4,
       "title": "Findings by Severity",
       "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(severity)(increase(philip_findings_total{repository=~\"$repository\"}[5m]))",
           "legendFormat": "{{severity}}"
         }
@@ -124,9 +132,11 @@
       "id": 5,
       "title": "Recent Findings",
       "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
       "targets": [
         {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(repository, verdict, severity)(increase(philip_findings_total{repository=~\"$repository\"}[1h])) > 0",
           "legendFormat": "{{repository}} {{verdict}} {{severity}}",
           "format": "table",
