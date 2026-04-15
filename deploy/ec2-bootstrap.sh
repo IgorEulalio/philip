@@ -57,8 +57,8 @@ apt-get install -y -qq \
 systemctl enable --now docker
 
 # Install Go
-GO_VERSION="1.23.4"
-if ! command -v go &>/dev/null || ! go version | grep -q "go1.23"; then
+GO_VERSION="1.25.4"
+if ! command -v go &>/dev/null || ! go version | grep -q "go1.25"; then
     echo "    Installing Go ${GO_VERSION}..."
     curl -sL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xzf -
 fi
@@ -119,6 +119,23 @@ echo "    Tetragon service running"
 echo ">>> [3/6] Building Philip..."
 
 cd "${REPO_ROOT}"
+
+# Install protoc and Go plugins for proto generation
+PROTOC_VERSION="28.3"
+if ! command -v protoc &>/dev/null; then
+    echo "    Installing protoc ${PROTOC_VERSION}..."
+    curl -sL "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
+        -o /tmp/protoc.zip
+    unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*' > /dev/null
+    rm /tmp/protoc.zip
+fi
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+export PATH="$(go env GOPATH)/bin:${PATH}"
+
+echo "    Generating proto..."
+make proto
+
 go build -ldflags="-s -w" -o bin/philip-agent  ./agent/cmd/philip-agent
 go build -ldflags="-s -w" -o bin/philip-server  ./backend/cmd/philip-server
 go build -ldflags="-s -w" -o bin/philip         ./backend/cmd/philip-cli
@@ -208,6 +225,14 @@ docker ps --format '{{.Names}}' | grep -q philip-server \
 docker ps --format '{{.Names}}' | grep -q postgres \
     && echo "  [OK]   postgres (docker)" \
     || echo "  [FAIL] postgres (docker)"
+
+docker ps --format '{{.Names}}' | grep -q prometheus \
+    && echo "  [OK]   prometheus (docker)" \
+    || echo "  [FAIL] prometheus (docker)"
+
+docker ps --format '{{.Names}}' | grep -q grafana \
+    && echo "  [OK]   grafana (docker)" \
+    || echo "  [FAIL] grafana (docker)"
 
 curl -sf http://localhost:8080/health > /dev/null 2>&1 \
     && echo "  [OK]   REST API (localhost:8080)" \
