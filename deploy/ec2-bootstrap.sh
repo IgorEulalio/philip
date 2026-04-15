@@ -74,12 +74,19 @@ echo ">>> [1/6] Installing system packages..."
 install_packages() {
     case "${PKG_MGR}" in
         dnf)
-            dnf install -y -q \
-                gcc gcc-c++ make curl git jq unzip ca-certificates tar gzip
+            # Skip curl if curl-minimal is present (Amazon Linux 2023)
+            DNF_PKGS="gcc gcc-c++ make git jq unzip ca-certificates tar gzip"
+            if ! rpm -q curl-minimal &>/dev/null; then
+                DNF_PKGS="${DNF_PKGS} curl"
+            fi
+            dnf install -y -q ${DNF_PKGS}
             ;;
         yum)
-            yum install -y -q \
-                gcc gcc-c++ make curl git jq unzip ca-certificates tar gzip
+            YUM_PKGS="gcc gcc-c++ make git jq unzip ca-certificates tar gzip"
+            if ! rpm -q curl-minimal &>/dev/null; then
+                YUM_PKGS="${YUM_PKGS} curl"
+            fi
+            yum install -y -q ${YUM_PKGS}
             ;;
         apt)
             apt-get update -qq
