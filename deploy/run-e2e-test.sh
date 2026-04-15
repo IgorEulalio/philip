@@ -10,11 +10,12 @@
 #   gh auth login  (one-time, browser-based — no tokens to export)
 #
 # Usage:
-#   bash deploy/run-e2e-test.sh --baseline   # 12 normal builds to train Philip
-#   bash deploy/run-e2e-test.sh --attack     # simulated supply chain attack
-#   bash deploy/run-e2e-test.sh --mixed      # benign build + one suspicious call
-#   bash deploy/run-e2e-test.sh --full       # all phases sequentially
-#   bash deploy/run-e2e-test.sh --status     # show recent runs
+#   bash deploy/run-e2e-test.sh --baseline                # 12 normal builds to train Philip
+#   bash deploy/run-e2e-test.sh --baseline --repeat 20   # 20 baseline builds
+#   bash deploy/run-e2e-test.sh --attack                 # simulated supply chain attack
+#   bash deploy/run-e2e-test.sh --mixed                  # benign build + one suspicious call
+#   bash deploy/run-e2e-test.sh --full                   # all phases sequentially
+#   bash deploy/run-e2e-test.sh --status                 # show recent runs
 # =============================================================================
 set -euo pipefail
 
@@ -170,22 +171,56 @@ show_status() {
 }
 
 # ---------------------------------------------------------------------------
-# CLI
+# CLI — parse --repeat N from any position
 # ---------------------------------------------------------------------------
-case "${1:-}" in
-    --baseline) run_baseline ;;
-    --attack)   run_attack   ;;
-    --mixed)    run_mixed    ;;
-    --full)     run_full     ;;
+REPEAT=1
+COMMAND=""
+args=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --repeat)
+            REPEAT="${2:?--repeat requires a number}"
+            shift 2
+            ;;
+        *)
+            args+=("$1")
+            shift
+            ;;
+    esac
+done
+
+run_repeated() {
+    local func="$1"
+    if [ "$REPEAT" -le 1 ]; then
+        "$func"
+        return
+    fi
+    log "Running ${REPEAT} iterations..."
+    for i in $(seq 1 "$REPEAT"); do
+        echo ""
+        log "=== Iteration ${i}/${REPEAT} ==="
+        "$func"
+    done
+    ok "All ${REPEAT} iterations complete"
+}
+
+case "${args[0]:-}" in
+    --baseline) run_repeated run_baseline ;;
+    --attack)   run_repeated run_attack   ;;
+    --mixed)    run_repeated run_mixed    ;;
+    --full)     run_repeated run_full     ;;
     --status)   show_status  ;;
     *)
-        echo "Usage: $0 {--baseline|--attack|--mixed|--full|--status}"
+        echo "Usage: $0 {--baseline|--attack|--mixed|--full|--status} [--repeat N]"
         echo ""
         echo "  --baseline   Train Philip with ${BASELINE_RUNS} normal builds"
         echo "  --attack     Simulate a supply chain attack"
         echo "  --mixed      Normal build + one suspicious action"
         echo "  --full       Run all three phases sequentially"
         echo "  --status     Show recent workflow runs"
+        echo ""
+        echo "Options:"
+        echo "  --repeat N   Repeat the chosen scenario N times"
         echo ""
         echo "Env vars:"
         echo "  BASELINE_RUNS   Number of baseline runs (default: 12)"

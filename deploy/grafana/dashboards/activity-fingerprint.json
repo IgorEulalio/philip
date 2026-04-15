@@ -174,7 +174,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_exec_timestamp_seconds{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "philip_job_exec_timestamp_seconds{repository=~\"$repository\", job_name=~\"$job_name\"} * 1000",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -216,11 +216,18 @@
         }
       ],
       "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(job_id|repository|job_name|Value.*)$"
+            }
+          }
+        },
         { "id": "merge" },
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
             "indexByName": {
               "job_id": 0,
               "repository": 1,
