@@ -204,32 +204,16 @@ if [ "$KERNEL_MAJOR" -lt 5 ] || ([ "$KERNEL_MAJOR" -eq 5 ] && [ "$KERNEL_MINOR" 
     echo "    WARNING: Kernel $(uname -r) — Tetragon needs 5.8+."
 fi
 
+TETRAGON_VERSION="v1.3.0"
 if ! command -v tetragon &>/dev/null; then
-    echo "    Installing Tetragon via package repo..."
-    case "${PKG_MGR}" in
-        dnf|yum)
-            cat > /etc/yum.repos.d/isovalent-tetragon.repo << 'REPO'
-[isovalent-tetragon]
-name=Isovalent Tetragon
-baseurl=https://packagecloud.io/isovalent/tetragon/el/2/$basearch
-gpgcheck=0
-enabled=1
-REPO
-            ${PKG_MGR} install -y tetragon
-            ;;
-        apt)
-            curl -sL https://packagecloud.io/install/repositories/isovalent/tetragon/script.deb.sh | bash
-            apt-get install -y -qq tetragon > /dev/null
-            ;;
-        pacman)
-            echo "    WARNING: No official Tetragon package for Arch. Install manually."
-            echo "    See: https://github.com/cilium/tetragon/releases"
-            ;;
-        zypper)
-            echo "    WARNING: No official Tetragon package for openSUSE. Install manually."
-            echo "    See: https://github.com/cilium/tetragon/releases"
-            ;;
-    esac
+    echo "    Installing Tetragon ${TETRAGON_VERSION} from release tarball..."
+    curl -sL "https://github.com/cilium/tetragon/releases/download/${TETRAGON_VERSION}/tetragon-${TETRAGON_VERSION}-amd64.tar.gz" \
+        -o /tmp/tetragon.tar.gz
+    tar xzf /tmp/tetragon.tar.gz -C /tmp
+    cd "/tmp/tetragon-${TETRAGON_VERSION}-amd64"
+    bash install.sh
+    rm -rf /tmp/tetragon.tar.gz "/tmp/tetragon-${TETRAGON_VERSION}-amd64"
+    echo "    Tetragon installed with BPF objects"
 else
     echo "    Tetragon already installed, skipping"
 fi

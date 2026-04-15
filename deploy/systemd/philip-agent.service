@@ -6,6 +6,7 @@ Requires=tetragon.service
 
 [Service]
 Type=simple
+ExecStartPre=/bin/rm -f /var/run/philip/action.sock
 ExecStart=/usr/local/bin/philip-agent --config /etc/philip/agent.json
 Restart=always
 RestartSec=5
