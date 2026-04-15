@@ -63,9 +63,11 @@ func (n *EventNormalizer) handleEvent(evt sensor.Event) {
 	// Always update the process tree first
 	n.tree.HandleEvent(evt)
 
-	// Auto-detect runner root PID if not yet set
-	if _, rootSet := n.tree.RootPID(); !rootSet {
-		if n.isRunnerProcess(evt) {
+	// Auto-detect runner root PID — update on every new runner process,
+	// since each job gets a new Runner.Worker with a different PID.
+	if n.isRunnerProcess(evt) {
+		currentRoot, rootSet := n.tree.RootPID()
+		if !rootSet || currentRoot != evt.PID {
 			n.logger.Info("detected runner process", "pid", evt.PID, "binary", evt.Binary)
 			n.tree.SetRoot(evt.PID)
 		}
