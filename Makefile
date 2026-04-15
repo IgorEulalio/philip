@@ -1,4 +1,4 @@
-.PHONY: all build build-agent build-server build-cli proto clean test lint run-agent run-server
+.PHONY: all build build-agent build-server build-cli proto clean test lint run-agent run-server docker-build docker-push
 
 # Go parameters
 GOCMD=go
@@ -65,8 +65,16 @@ deps:
 	$(GOMOD) download
 	$(GOMOD) tidy
 
-docker-backend:
-	docker build -f deploy/docker/Dockerfile.backend -t philip-server .
+# Docker
+DOCKER_IMAGE=igoreulalio/philip
+DOCKER_TAG?=$(VERSION)
+
+docker-build:
+	docker build -f deploy/docker/Dockerfile.backend -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
+
+docker-push: docker-build
+	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker push $(DOCKER_IMAGE):latest
 
 docker-compose-up:
 	docker-compose -f deploy/docker-compose.yml up -d

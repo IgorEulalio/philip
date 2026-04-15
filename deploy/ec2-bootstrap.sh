@@ -8,8 +8,9 @@
 # What this installs:
 #   1. System dependencies (Docker, Docker Compose, Go, Git, protoc)
 #   2. Tetragon (eBPF sensor)
-#   3. Philip backend (docker-compose: Postgres + philip-server + Prometheus + Grafana)
-#   4. Philip agent (systemd service)
+#   3. Philip agent + CLI (built from source, needs Go)
+#   4. Philip backend (docker-compose: pulls igoreulalio/philip from DockerHub)
+#   5. Philip agent (systemd service)
 #
 # Supported OS:
 #   - Amazon Linux 2 / Amazon Linux 2023
@@ -240,32 +241,31 @@ systemctl enable --now tetragon
 echo "    Tetragon service running"
 
 # ---------------------------------------------------------------------------
-# 3. Build Philip binaries
+# 3. Build Philip agent & CLI
 # ---------------------------------------------------------------------------
-echo ">>> [3/6] Building Philip..."
+echo ">>> [3/6] Building Philip agent & CLI..."
 
 cd "${REPO_ROOT}"
 
 echo "    Generating proto..."
 make proto
 
-echo "    Compiling binaries..."
+echo "    Compiling agent and CLI..."
 go build -ldflags="-s -w" -o bin/philip-agent  ./agent/cmd/philip-agent
-go build -ldflags="-s -w" -o bin/philip-server  ./backend/cmd/philip-server
 go build -ldflags="-s -w" -o bin/philip         ./backend/cmd/philip-cli
 
 cp bin/philip-agent  /usr/local/bin/
-cp bin/philip-server /usr/local/bin/
 cp bin/philip        /usr/local/bin/
-echo "    Binaries: philip-agent, philip-server, philip"
+echo "    Binaries: philip-agent, philip"
 
 # ---------------------------------------------------------------------------
 # 4. Start Philip backend (docker-compose)
 # ---------------------------------------------------------------------------
-echo ">>> [4/6] Starting backend (Postgres + philip-server)..."
+echo ">>> [4/6] Starting backend (pulling igoreulalio/philip from DockerHub)..."
 
 cd "${REPO_ROOT}/deploy"
-docker-compose up -d --build
+docker-compose pull
+docker-compose up -d
 
 echo -n "    Waiting for health..."
 for i in $(seq 1 30); do
