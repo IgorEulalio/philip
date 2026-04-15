@@ -1,4 +1,4 @@
-.PHONY: all build build-agent build-server build-cli proto clean test lint run-agent run-server docker-build docker-push
+.PHONY: all build build-agent build-server build-cli build-action proto clean test lint run-agent run-server docker-build docker-push
 
 # Go parameters
 GOCMD=go
@@ -24,7 +24,7 @@ LDFLAGS=-ldflags "-s -w -X github.com/IgorEulalio/philip/internal/version.Versio
 
 all: build
 
-build: build-agent build-server build-cli
+build: build-agent build-server build-cli build-action
 
 build-agent:
 	$(GOBUILD) $(LDFLAGS) -o $(AGENT_BINARY) ./agent/cmd/philip-agent
@@ -34,6 +34,9 @@ build-server:
 
 build-cli:
 	$(GOBUILD) $(LDFLAGS) -o $(CLI_BINARY) ./backend/cmd/philip-cli
+
+build-action:
+	cd action && npm ci && npm run build
 
 proto:
 	@mkdir -p $(PROTO_OUT)

@@ -117,6 +117,12 @@ func run(ctx context.Context, cfg *config.AgentConfig, logger *slog.Logger) erro
 		logger,
 	)
 
+	// Wire job_end signal from correlator to flush the job buffer
+	correlator.SetOnJobEnd(func() {
+		logger.Info("job_end received, flushing job buffer")
+		jobBuffer.FlushIfJobEnded()
+	})
+
 	// Start components
 	errCh := make(chan error, 4)
 

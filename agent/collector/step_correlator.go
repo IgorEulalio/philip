@@ -37,6 +37,7 @@ type StepCorrelator struct {
 	steps       []StepInfo
 	currentStep int
 	socketPath  string
+	onJobEnd    func()
 	logger      *slog.Logger
 }
 
@@ -46,6 +47,11 @@ func NewStepCorrelator(socketPath string, logger *slog.Logger) *StepCorrelator {
 		socketPath: socketPath,
 		logger:     logger,
 	}
+}
+
+// SetOnJobEnd registers a callback that fires when a job_end message is received.
+func (sc *StepCorrelator) SetOnJobEnd(fn func()) {
+	sc.onJobEnd = fn
 }
 
 // SocketPath returns the unix socket path this correlator listens on.
@@ -128,7 +134,9 @@ func (sc *StepCorrelator) handleConnection(conn net.Conn) {
 
 	case "job_end":
 		sc.logger.Info("job ended", "job_id", sc.currentJob.JobID)
-		// The job buffer will handle shipping events
+		if sc.onJobEnd != nil {
+			go sc.onJobEnd()
+		}
 
 	default:
 		sc.logger.Warn("unknown message type from action", "type", msg.Type)
