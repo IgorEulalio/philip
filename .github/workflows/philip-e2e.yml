@@ -18,7 +18,7 @@ on:
         default: "1"
 
 jobs:
-  build:
+  build-v1:
     name: "E2E (${{ inputs.scenario }} #${{ inputs.iteration }})"
     runs-on: [self-hosted, philip]
     steps:
