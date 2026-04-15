@@ -66,6 +66,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		migrationCreateEvents,
 		migrationCreateBaselines,
 		migrationCreateFindings,
+		migrationBaselinesToCompositeKey,
 	}
 
 	for i, m := range migrations {
@@ -181,6 +182,25 @@ CREATE INDEX IF NOT EXISTS idx_findings_repository ON findings(repository);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
 CREATE INDEX IF NOT EXISTS idx_findings_created_at ON findings(created_at);`
+
+// migrationBaselinesToCompositeKey migrates existing baselines table from
+// single-column PK (repository) to composite PK (repository, workflow_file, job_name).
+// Safe to run repeatedly — each statement uses IF NOT EXISTS / IF EXISTS guards.
+const migrationBaselinesToCompositeKey = `
+ALTER TABLE baselines ADD COLUMN IF NOT EXISTS workflow_file TEXT NOT NULL DEFAULT '';
+ALTER TABLE baselines ADD COLUMN IF NOT EXISTS job_name TEXT NOT NULL DEFAULT '';
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'baselines_pkey'
+        AND conrelid = 'baselines'::regclass
+        AND array_length(conkey, 1) = 1
+    ) THEN
+        ALTER TABLE baselines DROP CONSTRAINT baselines_pkey;
+        ALTER TABLE baselines ADD PRIMARY KEY (repository, workflow_file, job_name);
+    END IF;
+END $$;`
 
 // --- Agent operations ---
 
