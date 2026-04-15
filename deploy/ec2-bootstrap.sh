@@ -205,37 +205,36 @@ if [ "$KERNEL_MAJOR" -lt 5 ] || ([ "$KERNEL_MAJOR" -eq 5 ] && [ "$KERNEL_MINOR" 
 fi
 
 if ! command -v tetragon &>/dev/null; then
-    TETRAGON_VERSION="v1.3.0"
-    curl -sL "https://github.com/cilium/tetragon/releases/download/${TETRAGON_VERSION}/tetragon-${TETRAGON_VERSION}-amd64.tar.gz" \
-        -o /tmp/tetragon.tar.gz
-    mkdir -p /tmp/tetragon-extract
-    tar -xzf /tmp/tetragon.tar.gz -C /tmp/tetragon-extract
-    find /tmp/tetragon-extract -name "tetragon" -type f -executable -exec cp {} /usr/local/bin/tetragon \;
-    find /tmp/tetragon-extract -name "tetra" -type f -executable -exec cp {} /usr/local/bin/tetra \; 2>/dev/null || true
-    rm -rf /tmp/tetragon.tar.gz /tmp/tetragon-extract
-    chmod +x /usr/local/bin/tetragon
-    echo "    Tetragon binary installed"
+    echo "    Installing Tetragon via package repo..."
+    case "${PKG_MGR}" in
+        dnf|yum)
+            cat > /etc/yum.repos.d/isovalent-tetragon.repo << 'REPO'
+[isovalent-tetragon]
+name=Isovalent Tetragon
+baseurl=https://packagecloud.io/isovalent/tetragon/el/2/$basearch
+gpgcheck=0
+enabled=1
+REPO
+            ${PKG_MGR} install -y tetragon
+            ;;
+        apt)
+            curl -sL https://packagecloud.io/install/repositories/isovalent/tetragon/script.deb.sh | bash
+            apt-get install -y -qq tetragon > /dev/null
+            ;;
+        pacman)
+            echo "    WARNING: No official Tetragon package for Arch. Install manually."
+            echo "    See: https://github.com/cilium/tetragon/releases"
+            ;;
+        zypper)
+            echo "    WARNING: No official Tetragon package for openSUSE. Install manually."
+            echo "    See: https://github.com/cilium/tetragon/releases"
+            ;;
+    esac
 else
-    echo "    Tetragon already installed, skipping download"
+    echo "    Tetragon already installed, skipping"
 fi
 
 mkdir -p /etc/tetragon/tetragon.conf.d /var/run/tetragon
-
-cat > /etc/systemd/system/tetragon.service << 'UNIT'
-[Unit]
-Description=Tetragon eBPF Security Observability
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/tetragon --config-dir /etc/tetragon/tetragon.conf.d/
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
 systemctl daemon-reload
 systemctl enable --now tetragon
 echo "    Tetragon service running"
