@@ -6,13 +6,20 @@
 # GitHub Actions runner. No tokens or keys needed for a minimal setup.
 #
 # What this installs:
-#   1. Tetragon (eBPF sensor)
-#   2. Philip backend (docker-compose: Postgres + philip-server)
-#   3. Philip agent (systemd service)
+#   1. System dependencies (Docker, Docker Compose, Go, Git, protoc)
+#   2. Tetragon (eBPF sensor)
+#   3. Philip backend (docker-compose: Postgres + philip-server + Prometheus + Grafana)
+#   4. Philip agent (systemd service)
+#
+# Supported OS:
+#   - Amazon Linux 2 / Amazon Linux 2023
+#   - Ubuntu / Debian
+#   - Fedora / RHEL / CentOS / Rocky
+#   - Arch Linux
+#   - Any Linux with a supported package manager (dnf, yum, apt, pacman, zypper)
+#   Kernel 5.8+ required for Tetragon.
 #
 # Prerequisites:
-#   - Ubuntu 22.04+ (kernel 5.15+)
-#   - Self-hosted GitHub Actions runner already installed and running
 #   - Root / sudo access
 #
 # Usage:
@@ -40,31 +47,143 @@ echo "=============================================="
 echo ""
 
 # ---------------------------------------------------------------------------
+# Detect package manager
+# ---------------------------------------------------------------------------
+PKG_MGR=""
+if command -v dnf &>/dev/null; then
+    PKG_MGR="dnf"
+elif command -v yum &>/dev/null; then
+    PKG_MGR="yum"
+elif command -v apt-get &>/dev/null; then
+    PKG_MGR="apt"
+elif command -v pacman &>/dev/null; then
+    PKG_MGR="pacman"
+elif command -v zypper &>/dev/null; then
+    PKG_MGR="zypper"
+else
+    echo "ERROR: No supported package manager found (dnf, yum, apt, pacman, zypper)."
+    exit 1
+fi
+echo "    Package manager: ${PKG_MGR}"
+
+# ---------------------------------------------------------------------------
 # 1. System packages
 # ---------------------------------------------------------------------------
 echo ">>> [1/6] Installing system packages..."
-apt-get update -qq
-apt-get install -y -qq \
-    build-essential \
-    curl \
-    git \
-    jq \
-    docker.io \
-    docker-compose \
-    ca-certificates \
-    > /dev/null
 
+install_packages() {
+    case "${PKG_MGR}" in
+        dnf)
+            dnf install -y -q \
+                gcc gcc-c++ make curl git jq unzip ca-certificates tar gzip
+            ;;
+        yum)
+            yum install -y -q \
+                gcc gcc-c++ make curl git jq unzip ca-certificates tar gzip
+            ;;
+        apt)
+            apt-get update -qq
+            apt-get install -y -qq \
+                build-essential curl git jq unzip ca-certificates > /dev/null
+            ;;
+        pacman)
+            pacman -Sy --noconfirm --needed \
+                base-devel curl git jq unzip ca-certificates
+            ;;
+        zypper)
+            zypper install -y \
+                gcc gcc-c++ make curl git jq unzip ca-certificates tar gzip
+            ;;
+    esac
+}
+
+install_docker() {
+    if command -v docker &>/dev/null; then
+        echo "    Docker already installed"
+        return
+    fi
+    echo "    Installing Docker..."
+    case "${PKG_MGR}" in
+        dnf)
+            dnf install -y -q dnf-plugins-core
+            dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo 2>/dev/null || true
+            dnf install -y -q docker-ce docker-ce-cli containerd.io 2>/dev/null \
+                || dnf install -y -q docker
+            ;;
+        yum)
+            yum install -y -q docker
+            ;;
+        apt)
+            apt-get install -y -qq docker.io > /dev/null
+            ;;
+        pacman)
+            pacman -S --noconfirm docker
+            ;;
+        zypper)
+            zypper install -y docker
+            ;;
+    esac
+}
+
+install_docker_compose() {
+    if command -v docker-compose &>/dev/null; then
+        echo "    Docker Compose already installed"
+        return
+    fi
+    # docker compose v2 plugin ships with docker-ce on some distros
+    if docker compose version &>/dev/null; then
+        echo "    Docker Compose plugin detected, creating docker-compose wrapper..."
+        cat > /usr/local/bin/docker-compose << 'WRAPPER'
+#!/bin/sh
+exec docker compose "$@"
+WRAPPER
+        chmod +x /usr/local/bin/docker-compose
+        return
+    fi
+    echo "    Installing Docker Compose..."
+    COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+    curl -sL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" \
+        -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+}
+
+install_packages
+install_docker
 systemctl enable --now docker
+# Add the calling user to the docker group
+REAL_USER="${SUDO_USER:-$(whoami)}"
+usermod -aG docker "${REAL_USER}" 2>/dev/null || true
+install_docker_compose
+echo "    $(docker --version)"
+echo "    $(docker-compose version 2>/dev/null || docker-compose --version)"
 
-# Install Go
+# Install Go (all platforms)
 GO_VERSION="1.25.4"
 if ! command -v go &>/dev/null || ! go version | grep -q "go1.25"; then
     echo "    Installing Go ${GO_VERSION}..."
+    rm -rf /usr/local/go
     curl -sL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xzf -
 fi
 export PATH="/usr/local/go/bin:${PATH}"
 echo 'export PATH="/usr/local/go/bin:${PATH}"' > /etc/profile.d/go.sh
 echo "    $(go version)"
+
+# Install protoc (all platforms)
+PROTOC_VERSION="28.3"
+if ! command -v protoc &>/dev/null; then
+    echo "    Installing protoc ${PROTOC_VERSION}..."
+    curl -sL "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
+        -o /tmp/protoc.zip
+    unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*' > /dev/null
+    rm /tmp/protoc.zip
+fi
+echo "    $(protoc --version)"
+
+# Install Go protoc plugins
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+export PATH="$(go env GOPATH)/bin:${PATH}"
+echo "    protoc-gen-go installed"
 
 # ---------------------------------------------------------------------------
 # 2. Install Tetragon
@@ -120,22 +239,10 @@ echo ">>> [3/6] Building Philip..."
 
 cd "${REPO_ROOT}"
 
-# Install protoc and Go plugins for proto generation
-PROTOC_VERSION="28.3"
-if ! command -v protoc &>/dev/null; then
-    echo "    Installing protoc ${PROTOC_VERSION}..."
-    curl -sL "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
-        -o /tmp/protoc.zip
-    unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*' > /dev/null
-    rm /tmp/protoc.zip
-fi
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-export PATH="$(go env GOPATH)/bin:${PATH}"
-
 echo "    Generating proto..."
 make proto
 
+echo "    Compiling binaries..."
 go build -ldflags="-s -w" -o bin/philip-agent  ./agent/cmd/philip-agent
 go build -ldflags="-s -w" -o bin/philip-server  ./backend/cmd/philip-server
 go build -ldflags="-s -w" -o bin/philip         ./backend/cmd/philip-cli
