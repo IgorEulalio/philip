@@ -1,0 +1,36 @@
+name: "Philip report"
+description: "Prints the Philip baseline, findings, and agent health for the current run"
+inputs:
+  scenario:
+    description: "Scenario name that was run"
+    required: true
+  iteration:
+    description: "Iteration number"
+    required: false
+    default: "1"
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        echo ""
+        echo "========================================="
+        echo " Philip Report"
+        echo " Scenario:  ${{ inputs.scenario }}"
+        echo " Iteration: ${{ inputs.iteration }}"
+        echo "========================================="
+        echo ""
+        echo "--- Baseline ---"
+        curl -sf "http://localhost:8080/api/v1/baselines?repository=${{ github.repository }}" \
+          | jq '{status, total_jobs_observed, process_count: (.process_profiles | length), network_count: (.network_profiles | length)}' \
+          2>/dev/null || echo "(no baseline yet)"
+        echo ""
+        echo "--- Findings ---"
+        curl -sf "http://localhost:8080/api/v1/findings?repository=${{ github.repository }}" \
+          | jq '.[] | {severity, verdict, confidence, reasoning}' \
+          2>/dev/null || echo "(no findings)"
+        echo ""
+        echo "--- Agent health ---"
+        systemctl is-active philip-agent 2>/dev/null && echo "philip-agent: running" || echo "philip-agent: not running"
+        systemctl is-active tetragon 2>/dev/null && echo "tetragon: running" || echo "tetragon: not running"
