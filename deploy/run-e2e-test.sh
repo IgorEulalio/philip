@@ -27,14 +27,13 @@
 #   run-e2e-test.sh baseline --repeat 12         # train Philip with 12 baseline builds
 #   run-e2e-test.sh docker                       # single docker build
 #   run-e2e-test.sh go --attack                  # Go CI with injected attack
-#   run-e2e-test.sh all --repeat 3               # all jobs, 3 times each
-#   run-e2e-test.sh all --repeat 5 --attack      # all jobs with attacks, 5 times
+#   run-e2e-test.sh all --repeat 3               # all 5 jobs in parallel, 3 times
+#   run-e2e-test.sh all --repeat 5 --attack      # all 5 jobs with attacks, 5 times
 # =============================================================================
 set -euo pipefail
 
 BRANCH="${BRANCH:-main}"
 WORKFLOW="philip-e2e.yml"
-ALL_JOBS=(baseline docker python go deploy)
 
 # Auto-detect repo
 REPO="${GITHUB_REPOSITORY:-}"
@@ -136,7 +135,7 @@ usage() {
     echo "  python     Python CI pipeline"
     echo "  go         Go project pipeline"
     echo "  deploy     Deployment tools simulation"
-    echo "  all        All jobs sequentially"
+    echo "  all        All 5 jobs in parallel (one workflow run)"
     echo "  status     Show recent workflow runs"
     echo ""
     echo "Options:"
@@ -216,16 +215,8 @@ run_job() {
 }
 
 case "$JOB" in
-    baseline|docker|python|go|deploy)
+    baseline|docker|python|go|deploy|all)
         run_job "$JOB"
-        ;;
-    all)
-        for job in "${ALL_JOBS[@]}"; do
-            run_job "$job"
-        done
-        echo ""
-        log "All jobs complete. Summary:"
-        show_status
         ;;
     status)
         show_status
