@@ -38,7 +38,9 @@ func (s *Server) Serve(address string) error {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 
-	s.grpcSrv = grpc.NewServer()
+	s.grpcSrv = grpc.NewServer(
+		grpc.MaxRecvMsgSize(64 * 1024 * 1024), // 64 MB
+	)
 	pb.RegisterAgentServiceServer(s.grpcSrv, s)
 
 	s.logger.Info("gRPC server listening", "address", address)

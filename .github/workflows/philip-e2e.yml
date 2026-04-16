@@ -47,20 +47,20 @@ jobs:
       - name: "Build"
         if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
         env:
-          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
+          GOCACHE: /home/runner/philip-gocache-${{ github.run_id }}
         run: |
           echo "Building project..."
           go vet ./... 2>/dev/null || true
-          go build -o /tmp/philip-build-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
+          go build -o /home/runner/philip-build-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
           ls -la
           find . -name "*.go" -type f | head -20 | xargs wc -l 2>/dev/null || true
-          rm -f /tmp/philip-build-${{ github.run_id }}
+          rm -f /home/runner/philip-build-${{ github.run_id }}
           echo "Build complete"
 
       - name: "Run tests"
         if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
         env:
-          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
+          GOCACHE: /home/runner/philip-gocache-${{ github.run_id }}
         run: |
           echo "Running tests..."
           go test ./backend/detection/... -count=1 -short 2>/dev/null || true
@@ -145,3 +145,9 @@ jobs:
           echo "--- Agent health ---"
           systemctl is-active philip-agent 2>/dev/null && echo "philip-agent: running" || echo "philip-agent: not running"
           systemctl is-active tetragon 2>/dev/null && echo "tetragon: running" || echo "tetragon: not running"
+
+      - name: "Cleanup"
+        if: always()
+        run: |
+          rm -rf /home/runner/philip-gocache-${{ github.run_id }}
+          rm -f /home/runner/philip-build-${{ github.run_id }}

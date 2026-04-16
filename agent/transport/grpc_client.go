@@ -29,6 +29,7 @@ func NewBackendClient(address string, agentID string, logger *slog.Logger) (*Bac
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(64*1024*1024)), // 64 MB
 	)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to backend: %w", err)

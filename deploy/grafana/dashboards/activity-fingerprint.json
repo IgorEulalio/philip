@@ -220,7 +220,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(job_id|repository|job_name|Value.*)$"
+              "pattern": "^(job_id|run_id|repository|job_name|Value.*)$"
             }
           }
         },
@@ -261,6 +261,27 @@
       ],
       "fieldConfig": {
         "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Job ID" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View on GitHub",
+                    "url": "https://github.com/${__data.fields.Repository}/actions/runs/${__data.fields.run_id}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "run_id" },
+            "properties": [
+              { "id": "custom.hidden", "value": true }
+            ]
+          },
           {
             "matcher": { "id": "byName", "options": "Timestamp" },
             "properties": [
