@@ -52,20 +52,20 @@ jobs:
       - name: "Build"
         if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
         env:
-          GOCACHE: /home/runner/philip-gocache-${{ github.run_id }}
+          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
         run: |
           echo "Building project..."
           go vet ./... 2>/dev/null || true
-          go build -o /home/runner/philip-build-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
+          go build -o /tmp/philip-build-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
           ls -la
           find . -name "*.go" -type f | head -20 | xargs wc -l 2>/dev/null || true
-          rm -f /home/runner/philip-build-${{ github.run_id }}
+          rm -f /tmp/philip-build-${{ github.run_id }}
           echo "Build complete"
 
       - name: "Run tests"
         if: inputs.scenario == 'baseline' || inputs.scenario == 'mixed'
         env:
-          GOCACHE: /home/runner/philip-gocache-${{ github.run_id }}
+          GOCACHE: /tmp/philip-gocache-${{ github.run_id }}
         run: |
           echo "Running tests..."
           go test ./backend/detection/... -count=1 -short 2>/dev/null || true
@@ -321,8 +321,8 @@ jobs:
       - name: "Go: build and test"
         if: inputs.scenario == 'go-ci' || inputs.scenario == 'full-baseline'
         env:
-          GOCACHE: /home/runner/philip-gocache-go-${{ github.run_id }}
-          GOPATH: /home/runner/philip-gopath-${{ github.run_id }}
+          GOCACHE: /tmp/philip-gocache-go-${{ github.run_id }}
+          GOPATH: /tmp/philip-gopath-${{ github.run_id }}
         run: |
           WORKDIR="/tmp/philip-go-${{ github.run_id }}"
           cd "${WORKDIR}"
@@ -341,8 +341,8 @@ jobs:
         if: (inputs.scenario == 'go-ci' || inputs.scenario == 'full-baseline') && always()
         run: |
           rm -rf "/tmp/philip-go-${{ github.run_id }}"
-          rm -rf "/home/runner/philip-gocache-go-${{ github.run_id }}"
-          rm -rf "/home/runner/philip-gopath-${{ github.run_id }}"
+          rm -rf "/tmp/philip-gocache-go-${{ github.run_id }}"
+          rm -rf "/tmp/philip-gopath-${{ github.run_id }}"
 
       # =============================================================
       # DEPLOY-SIM — simulates a deployment pipeline (no real infra)
@@ -414,8 +414,8 @@ jobs:
           python3 --version 2>/dev/null || true
           echo "Building project..."
           go vet ./... 2>/dev/null || true
-          go build -o /home/runner/philip-fullbaseline-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
-          rm -f /home/runner/philip-fullbaseline-${{ github.run_id }}
+          go build -o /tmp/philip-fullbaseline-${{ github.run_id }} ./backend/cmd/philip-server 2>/dev/null || true
+          rm -f /tmp/philip-fullbaseline-${{ github.run_id }}
           echo "Running tests..."
           go test ./backend/detection/... -count=1 -short 2>/dev/null || true
           go test ./backend/baseline/... -count=1 -short 2>/dev/null || true
@@ -454,5 +454,5 @@ jobs:
       - name: "Cleanup"
         if: always()
         run: |
-          rm -rf /home/runner/philip-gocache-${{ github.run_id }}
-          rm -f /home/runner/philip-build-${{ github.run_id }}
+          rm -rf /tmp/philip-gocache-${{ github.run_id }}
+          rm -f /tmp/philip-build-${{ github.run_id }}
