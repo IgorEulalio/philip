@@ -205,7 +205,15 @@ run_repeated() {
 }
 
 case "${args[0]:-}" in
-    --baseline) run_repeated run_baseline ;;
+    --baseline)
+        # --repeat overrides BASELINE_RUNS for --baseline
+        if [ "$REPEAT" -gt 1 ]; then
+            BASELINE_RUNS="$REPEAT"
+            run_baseline
+        else
+            run_baseline
+        fi
+        ;;
     --attack)   run_repeated run_attack   ;;
     --mixed)    run_repeated run_mixed    ;;
     --full)     run_repeated run_full     ;;
