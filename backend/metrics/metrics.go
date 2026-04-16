@@ -119,10 +119,10 @@ var (
 	}, []string{"repository", "job_name", "job_id", "run_id"})
 
 	// JobExecVerdict is the numeric verdict of the execution.
-	// 0=clean, 1=benign, 2=suspicious, 3=critical, 4=low_confidence
+	// 0=clean, 1=benign, 2=suspicious, 3=critical, 4=low_confidence, 5=learning
 	JobExecVerdict = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "philip_job_exec_verdict",
-		Help: "Verdict of the execution (0=clean, 1=benign, 2=suspicious, 3=critical)",
+		Help: "Verdict of the execution (0=clean, 1=benign, 2=suspicious, 3=critical, 5=learning)",
 	}, []string{"repository", "job_name", "job_id", "run_id"})
 
 	// JobExecEventCount is the number of events in the execution.
@@ -197,6 +197,8 @@ func VerdictToNumeric(verdict string) float64 {
 		return 3
 	case "low_confidence":
 		return 4
+	case "learning":
+		return 5
 	default:
 		return -1
 	}

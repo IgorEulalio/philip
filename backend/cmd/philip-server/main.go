@@ -215,6 +215,30 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		// Score deviations
 		deviations := scorer.ScoreJob(bl, events)
 
+		// During learning phase: record static detections for metrics but don't
+		// report a misleading score/verdict. The baseline isn't trained yet, so
+		// static-only hits (e.g. python3 flagged as suspicious) would show 1.00
+		// score which is confusing. Mark the execution as "learning" instead.
+		if bl.IsLearning() {
+			// Still record static detection metrics for observability
+			for _, dev := range deviations {
+				if dev.StaticOnly {
+					metrics.StaticDetections.WithLabelValues(repository, string(dev.DeviationType)).Inc()
+				}
+			}
+			metrics.JobExecScore.WithLabelValues(repository, jobName, jobID, runID).Set(0)
+			metrics.JobExecDeviationCount.WithLabelValues(repository, jobName, jobID, runID).Set(0)
+			metrics.JobExecVerdict.WithLabelValues(repository, jobName, jobID, runID).Set(metrics.VerdictToNumeric("learning"))
+			metrics.JobExecSeverity.WithLabelValues(repository, jobName, jobID, runID).Set(0)
+			metrics.JobsAnalyzed.WithLabelValues(repository, jobName, "learning").Inc()
+			logger.Info("baseline learning, skipping triage",
+				"repository", repository,
+				"job_name", jobName,
+				"jobs_observed", bl.TotalJobsObserved,
+				"static_detections", len(deviations))
+			return
+		}
+
 		// Compute job-level score (max deviation score)
 		var maxScore float64
 		for _, dev := range deviations {

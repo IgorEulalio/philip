@@ -368,7 +368,8 @@
                   { "type": "value", "options": { "1": { "color": "green", "text": "BENIGN" } } },
                   { "type": "value", "options": { "2": { "color": "orange", "text": "SUSPICIOUS" } } },
                   { "type": "value", "options": { "3": { "color": "red", "text": "CRITICAL" } } },
-                  { "type": "value", "options": { "4": { "color": "yellow", "text": "LOW CONFIDENCE" } } }
+                  { "type": "value", "options": { "4": { "color": "yellow", "text": "LOW CONFIDENCE" } } },
+                  { "type": "value", "options": { "5": { "color": "blue", "text": "LEARNING" } } }
                 ]
               }
             ]
@@ -519,6 +520,10 @@
           {
             "matcher": { "id": "byName", "options": "critical" },
             "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "learning" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
           }
         ]
       }
