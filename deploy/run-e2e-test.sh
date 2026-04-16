@@ -14,6 +14,11 @@
 #   bash deploy/run-e2e-test.sh --baseline --repeat 20   # 20 baseline builds
 #   bash deploy/run-e2e-test.sh --attack                 # simulated supply chain attack
 #   bash deploy/run-e2e-test.sh --mixed                  # benign build + one suspicious call
+#   bash deploy/run-e2e-test.sh --docker-build           # Docker build pipeline simulation
+#   bash deploy/run-e2e-test.sh --python-ci              # Python CI pipeline simulation
+#   bash deploy/run-e2e-test.sh --go-ci                  # Go CI pipeline simulation
+#   bash deploy/run-e2e-test.sh --deploy-sim             # Deployment pipeline simulation
+#   bash deploy/run-e2e-test.sh --full-baseline          # All scenarios combined for rich baseline
 #   bash deploy/run-e2e-test.sh --full                   # all phases sequentially
 #   bash deploy/run-e2e-test.sh --status                 # show recent runs
 # =============================================================================
@@ -136,6 +141,56 @@ run_mixed() {
     trigger_and_wait "mixed" "1"
 }
 
+run_docker_build() {
+    echo "=============================================="
+    echo " Docker Build Scenario"
+    echo " Simulates a containerized build pipeline"
+    echo "=============================================="
+    echo ""
+
+    trigger_and_wait "docker-build" "1"
+}
+
+run_python_ci() {
+    echo "=============================================="
+    echo " Python CI Scenario"
+    echo " Simulates a Python project pipeline"
+    echo "=============================================="
+    echo ""
+
+    trigger_and_wait "python-ci" "1"
+}
+
+run_go_ci() {
+    echo "=============================================="
+    echo " Go CI Scenario"
+    echo " Simulates a Go project pipeline"
+    echo "=============================================="
+    echo ""
+
+    trigger_and_wait "go-ci" "1"
+}
+
+run_deploy_sim() {
+    echo "=============================================="
+    echo " Deploy Simulation Scenario"
+    echo " Simulates deployment tooling (no real infra)"
+    echo "=============================================="
+    echo ""
+
+    trigger_and_wait "deploy-sim" "1"
+}
+
+run_full_baseline() {
+    echo "=============================================="
+    echo " Full Baseline Scenario"
+    echo " All CI scenarios combined for rich baseline"
+    echo "=============================================="
+    echo ""
+
+    trigger_and_wait "full-baseline" "1"
+}
+
 run_full() {
     echo "=============================================="
     echo " Philip Full E2E"
@@ -145,6 +200,10 @@ run_full() {
     echo ""
 
     run_baseline
+    run_docker_build
+    run_python_ci
+    run_go_ci
+    run_deploy_sim
     run_attack
     run_mixed
 
@@ -214,18 +273,28 @@ case "${args[0]:-}" in
             run_baseline
         fi
         ;;
-    --attack)   run_repeated run_attack   ;;
-    --mixed)    run_repeated run_mixed    ;;
-    --full)     run_repeated run_full     ;;
-    --status)   show_status  ;;
+    --attack)        run_repeated run_attack        ;;
+    --mixed)         run_repeated run_mixed         ;;
+    --docker-build)  run_repeated run_docker_build  ;;
+    --python-ci)     run_repeated run_python_ci     ;;
+    --go-ci)         run_repeated run_go_ci         ;;
+    --deploy-sim)    run_repeated run_deploy_sim    ;;
+    --full-baseline) run_repeated run_full_baseline ;;
+    --full)          run_repeated run_full          ;;
+    --status)        show_status  ;;
     *)
-        echo "Usage: $0 {--baseline|--attack|--mixed|--full|--status} [--repeat N]"
+        echo "Usage: $0 {--baseline|--attack|--mixed|--docker-build|--python-ci|--go-ci|--deploy-sim|--full-baseline|--full|--status} [--repeat N]"
         echo ""
-        echo "  --baseline   Train Philip with ${BASELINE_RUNS} normal builds"
-        echo "  --attack     Simulate a supply chain attack"
-        echo "  --mixed      Normal build + one suspicious action"
-        echo "  --full       Run all three phases sequentially"
-        echo "  --status     Show recent workflow runs"
+        echo "  --baseline       Train Philip with ${BASELINE_RUNS} normal builds"
+        echo "  --attack         Simulate a supply chain attack"
+        echo "  --mixed          Normal build + one suspicious action"
+        echo "  --docker-build   Docker build pipeline simulation"
+        echo "  --python-ci      Python CI pipeline simulation"
+        echo "  --go-ci          Go CI pipeline simulation"
+        echo "  --deploy-sim     Deployment pipeline simulation (no real infra)"
+        echo "  --full-baseline  All scenarios combined for richest baseline"
+        echo "  --full           Run all phases sequentially"
+        echo "  --status         Show recent workflow runs"
         echo ""
         echo "Options:"
         echo "  --repeat N   Repeat the chosen scenario N times"
