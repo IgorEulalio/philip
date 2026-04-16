@@ -19,16 +19,18 @@ services:
 
   philip-server:
     image: igoreulalio/philip:latest
+    command: ["-c", "/etc/philip/config.json"]
     ports:
       - "9090:9090"  # gRPC (agent communication)
       - "8080:8080"  # REST API
+    volumes:
+      - ./config.json:/etc/philip/config.json:ro
     environment:
+      # Env vars override config file values
       PHILIP_DB_HOST: postgres
       PHILIP_DB_USER: philip
       PHILIP_DB_PASSWORD: philip
       PHILIP_DB_NAME: philip
-      PHILIP_GRPC_ADDRESS: ":9090"
-      PHILIP_REST_ADDRESS: ":8080"
       PHILIP_LOG_LEVEL: info
       # Set these to enable features:
       # OPENAI_API_KEY: your-api-key

@@ -41,6 +41,9 @@ func (m *mockStore) UpsertBaseline(_ context.Context, b *storage.BaselineRecord)
 	return nil
 }
 
+func (m *mockStore) ListBaselines(_ context.Context) ([]storage.BaselineSummary, error) {
+	return nil, nil
+}
 func (m *mockStore) UpsertAgent(_ context.Context, _, _, _, _ string) error              { return nil }
 func (m *mockStore) UpdateAgentHeartbeat(_ context.Context, _ string) error               { return nil }
 func (m *mockStore) InsertJobRecord(_ context.Context, _, _, _, _, _, _, _, _, _, _ string, _ int, _, _ time.Time, _ map[string]interface{}) error {

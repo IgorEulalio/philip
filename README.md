@@ -70,6 +70,10 @@ jobs:
       - run: npm run build
 ```
 
+## Detection Logic
+
+Philip's detection system is the core of the project. For a detailed explanation of how every layer works — baselines, scoring, MITRE ATT&CK mapping, attack chain detection, and the L1/L2 triage pipeline — see **[Detection Logic](docs/detection-logic.md)**.
+
 ## Project Structure
 
 ```

@@ -298,6 +298,38 @@ func (s *Store) GetBaseline(ctx context.Context, repository, workflowFile, jobNa
 	return &b, nil
 }
 
+// ListBaselines returns a summary of all baselines.
+func (s *Store) ListBaselines(ctx context.Context) ([]BaselineSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT repository, workflow_file, job_name, total_jobs_observed, status,
+			first_observed, last_updated,
+			coalesce(jsonb_array_length(process_profiles), 0),
+			coalesce(jsonb_array_length(network_profiles), 0),
+			coalesce(jsonb_array_length(file_access_profiles), 0)
+		FROM baselines
+		ORDER BY last_updated DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []BaselineSummary
+	for rows.Next() {
+		var s BaselineSummary
+		if err := rows.Scan(
+			&s.Repository, &s.WorkflowFile, &s.JobName,
+			&s.TotalJobsObserved, &s.Status,
+			&s.FirstObserved, &s.LastUpdated,
+			&s.ProcessProfiles, &s.NetworkProfiles, &s.FileAccessProfiles,
+		); err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, s)
+	}
+	return summaries, rows.Err()
+}
+
 // UpsertBaseline creates or updates a baseline (composite key: repository + workflow_file + job_name).
 func (s *Store) UpsertBaseline(ctx context.Context, b *BaselineRecord) error {
 	processJSON, _ := json.Marshal(b.ProcessProfiles)
@@ -411,10 +443,18 @@ type BaselineRecord struct {
 	FileAccessProfiles []FileAccessProfileDB `json:"file_access_profiles"`
 }
 
+// ArgSignatureDB is a normalized arg pattern with frequency data.
+type ArgSignatureDB struct {
+	Pattern       string  `json:"pattern"`
+	Frequency     float64 `json:"frequency"`
+	ObservedCount int     `json:"observed_count"`
+}
+
 // ProcessProfileDB is a process profile stored in the database.
 type ProcessProfileDB struct {
 	BinaryPath          string             `json:"binary_path"`
 	TypicalArgsPatterns []string           `json:"typical_args_patterns"`
+	ArgSignatures       []ArgSignatureDB   `json:"arg_signatures,omitempty"`
 	TypicalParent       string             `json:"typical_parent"`
 	KnownParents        []string           `json:"known_parents,omitempty"`
 	StepFrequency       map[string]float64 `json:"step_frequency,omitempty"`
@@ -427,6 +467,8 @@ type ProcessProfileDB struct {
 type NetworkProfileDB struct {
 	DestinationCIDRs []string  `json:"destination_cidrs"`
 	TypicalPorts     []uint32  `json:"typical_ports"`
+	Hostnames        []string  `json:"hostnames,omitempty"`
+	DomainSuffix     string    `json:"domain_suffix,omitempty"`
 	Frequency        float64   `json:"frequency"`
 	FirstSeen        time.Time `json:"first_seen"`
 	LastSeen         time.Time `json:"last_seen"`
@@ -434,11 +476,26 @@ type NetworkProfileDB struct {
 
 // FileAccessProfileDB is a file access profile stored in the database.
 type FileAccessProfileDB struct {
-	PathPatterns          []string  `json:"path_patterns"`
-	SensitivePathsAccessed []string `json:"sensitive_paths_accessed"`
-	Frequency             float64   `json:"frequency"`
-	FirstSeen             time.Time `json:"first_seen"`
-	LastSeen              time.Time `json:"last_seen"`
+	PathPattern string    `json:"path_pattern"`
+	AccessTypes []string  `json:"access_types"`
+	BinaryPaths []string  `json:"binary_paths"`
+	Frequency   float64   `json:"frequency"`
+	FirstSeen   time.Time `json:"first_seen"`
+	LastSeen    time.Time `json:"last_seen"`
+}
+
+// BaselineSummary is a lightweight view of a baseline for listing.
+type BaselineSummary struct {
+	Repository        string    `json:"repository"`
+	WorkflowFile      string    `json:"workflow_file"`
+	JobName           string    `json:"job_name"`
+	TotalJobsObserved int       `json:"total_jobs_observed"`
+	Status            string    `json:"status"`
+	ProcessProfiles   int       `json:"process_profiles"`
+	NetworkProfiles   int       `json:"network_profiles"`
+	FileAccessProfiles int      `json:"file_access_profiles"`
+	FirstObserved     time.Time `json:"first_observed"`
+	LastUpdated       time.Time `json:"last_updated"`
 }
 
 // FindingRecord is the database representation of a finding.

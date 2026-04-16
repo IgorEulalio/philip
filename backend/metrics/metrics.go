@@ -51,6 +51,30 @@ var (
 		Help: "Total alerts deduplicated",
 	}, []string{"repository"})
 
+	// BaselineProfilesPruned counts profiles pruned due to staleness.
+	BaselineProfilesPruned = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "philip_baseline_profiles_pruned_total",
+		Help: "Total baseline profiles pruned due to staleness",
+	}, []string{"repository", "job_name", "profile_type"})
+
+	// StaticDetections counts detections made by static rules (during learning phase).
+	StaticDetections = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "philip_static_detections_total",
+		Help: "Total detections made by static rules during learning phase",
+	}, []string{"repository", "deviation_type"})
+
+	// AttackChainsDetected counts attack chains detected.
+	AttackChainsDetected = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "philip_attack_chains_total",
+		Help: "Total attack chains detected",
+	}, []string{"repository", "chain_name"})
+
+	// BaselineFileAccessProfiles tracks number of file access profiles per baseline.
+	BaselineFileAccessProfiles = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "philip_baseline_file_access_profiles",
+		Help: "Number of file access profiles in baseline",
+	}, []string{"repository", "job_name"})
+
 	// --- Histogram ---
 
 	// DeviationScore tracks the distribution of deviation scores.
@@ -134,11 +158,15 @@ var (
 		TriageVerdicts,
 		AlertsRouted,
 		AlertsDeduplicated,
+		BaselineProfilesPruned,
+		StaticDetections,
+		AttackChainsDetected,
 		DeviationScore,
 		BaselineStatus,
 		BaselineJobsObserved,
 		BaselineProcessProfiles,
 		BaselineNetworkProfiles,
+		BaselineFileAccessProfiles,
 		JobExecTimestamp,
 		JobExecVerdict,
 		JobExecEventCount,

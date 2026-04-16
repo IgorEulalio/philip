@@ -16,10 +16,11 @@ const (
 
 // TriageRequest contains all context needed for AI triage.
 type TriageRequest struct {
-	Deviations []detection.ScoredDeviation
-	Baseline   *baseline.RepositoryBaseline
-	Repository string
-	JobID      string
+	Deviations   []detection.ScoredDeviation
+	AttackChains []detection.AttackChain
+	Baseline     *baseline.RepositoryBaseline
+	Repository   string
+	JobID        string
 }
 
 // TriageResponse is the structured output from a triage layer.

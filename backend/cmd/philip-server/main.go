@@ -36,6 +36,9 @@ type ServerConfig struct {
 	// Database
 	DB storage.Config `json:"db"`
 
+	// Detection
+	Detection DetectionConfig `json:"detection"`
+
 	// OpenAI
 	OpenAIAPIKey string `json:"openai_api_key"`
 	OpenAIModel  string `json:"openai_model"`
@@ -46,6 +49,11 @@ type ServerConfig struct {
 
 	// Logging
 	LogLevel string `json:"log_level"`
+}
+
+// DetectionConfig holds detection-specific configuration.
+type DetectionConfig struct {
+	Baseline baseline.EngineConfig `json:"baseline"`
 }
 
 func defaultServerConfig() *ServerConfig {
@@ -60,6 +68,9 @@ func defaultServerConfig() *ServerConfig {
 			DBName:   "philip",
 			SSLMode:  "disable",
 		},
+		Detection: DetectionConfig{
+			Baseline: baseline.DefaultEngineConfig(),
+		},
 		OpenAIModel: "gpt-4o",
 		LogLevel:    "info",
 	}
@@ -67,6 +78,7 @@ func defaultServerConfig() *ServerConfig {
 
 func main() {
 	configPath := flag.String("config", "", "path to config file")
+	flag.StringVar(configPath, "c", "", "path to config file (shorthand)")
 	flag.Parse()
 
 	cfg := defaultServerConfig()
@@ -133,7 +145,10 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 	metrics.Register()
 
 	// Initialize components
-	baselineEngine := baseline.NewEngine(store, logger)
+	baselineEngine := baseline.NewEngineWithConfig(store, cfg.Detection.Baseline, logger)
+	logger.Info("detection config",
+		"learning_threshold", cfg.Detection.Baseline.LearningThreshold,
+		"max_profile_age_days", cfg.Detection.Baseline.MaxProfileAgeDays)
 	scorer := detection.NewScorer(logger)
 
 	// Initialize triage pipeline
@@ -190,6 +205,7 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		metrics.BaselineJobsObserved.WithLabelValues(repository, jobName).Set(float64(bl.TotalJobsObserved))
 		metrics.BaselineProcessProfiles.WithLabelValues(repository, jobName).Set(float64(len(bl.ProcessProfiles)))
 		metrics.BaselineNetworkProfiles.WithLabelValues(repository, jobName).Set(float64(len(bl.NetworkProfiles)))
+		metrics.BaselineFileAccessProfiles.WithLabelValues(repository, jobName).Set(float64(len(bl.FileAccessProfiles)))
 
 		// Set per-execution gauges (always, regardless of verdict)
 		runID := metrics.RunIDFromJobID(jobID)
@@ -220,20 +236,45 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 		for _, dev := range deviations {
 			metrics.DeviationsTotal.WithLabelValues(repository, jobName, string(dev.DeviationType)).Inc()
 			metrics.DeviationScore.WithLabelValues(repository, jobName, string(dev.DeviationType)).Observe(dev.Score)
+			if dev.StaticOnly {
+				metrics.StaticDetections.WithLabelValues(repository, string(dev.DeviationType)).Inc()
+			}
 		}
 
+		// Detect attack chains
+		chainDetector := detection.NewChainDetector()
+		chains := chainDetector.DetectChains(deviations)
+		for _, chain := range chains {
+			metrics.AttackChainsDetected.WithLabelValues(repository, chain.Name).Inc()
+		}
+		if len(chains) > 0 {
+			logger.Warn("attack chains detected",
+				"repository", repository,
+				"job_name", jobName,
+				"chains", len(chains),
+				"summary", detection.FormatChainsSummary(chains))
+		}
+
+		// Build deviation type breakdown
+		deviationTypes := make(map[string]int)
+		for _, dev := range deviations {
+			deviationTypes[string(dev.DeviationType)]++
+		}
 		logger.Info("deviations detected",
 			"repository", repository,
 			"job_name", jobName,
 			"count", len(deviations),
-			"max_score", maxScore)
+			"chains", len(chains),
+			"max_score", maxScore,
+			"types", deviationTypes)
 
 		// Run triage
 		triageReq := triage.TriageRequest{
-			Deviations: deviations,
-			Baseline:   bl,
-			Repository: repository,
-			JobID:      jobID,
+			Deviations:   deviations,
+			AttackChains: chains,
+			Baseline:     bl,
+			Repository:   repository,
+			JobID:        jobID,
 		}
 
 		// L1 classification
@@ -350,8 +391,27 @@ func run(ctx context.Context, cfg *ServerConfig, logger *slog.Logger) error {
 	})
 	restMux.HandleFunc("/api/v1/baselines", func(w http.ResponseWriter, r *http.Request) {
 		repo := r.URL.Query().Get("repository")
+		// If no repository param, list all baselines
 		if repo == "" {
-			http.Error(w, "repository parameter required", http.StatusBadRequest)
+			summaries, err := store.ListBaselines(r.Context())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// Add learning_threshold to each summary for dashboard display
+			type summaryWithThreshold struct {
+				storage.BaselineSummary
+				LearningThreshold int `json:"learning_threshold"`
+			}
+			result := make([]summaryWithThreshold, len(summaries))
+			for i, s := range summaries {
+				result[i] = summaryWithThreshold{
+					BaselineSummary:   s,
+					LearningThreshold: cfg.Detection.Baseline.LearningThreshold,
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
 			return
 		}
 		workflowFile := r.URL.Query().Get("workflow_file")

@@ -182,7 +182,27 @@ func buildPrompt(req triage.TriageRequest) string {
 		if dev.Event.FilePath != "" {
 			sb.WriteString(fmt.Sprintf("- File: %s (access: %s)\n", dev.Event.FilePath, dev.Event.AccessType))
 		}
+		if len(dev.MITRETechniques) > 0 {
+			sb.WriteString(fmt.Sprintf("- Pre-mapped MITRE ATT&CK: %s\n", strings.Join(dev.MITRETechniques, ", ")))
+		}
+		if dev.SuggestedSeverity != "" {
+			sb.WriteString(fmt.Sprintf("- Suggested severity: %s\n", dev.SuggestedSeverity))
+		}
+		if dev.StaticOnly {
+			sb.WriteString("- Note: detected via static rules only (baseline still in learning phase)\n")
+		}
 		sb.WriteString("\n")
+	}
+
+	// Attack chains
+	if len(req.AttackChains) > 0 {
+		sb.WriteString("## Detected Attack Chains\n\n")
+		sb.WriteString("The following multi-step attack patterns were detected by correlating deviations:\n\n")
+		for _, chain := range req.AttackChains {
+			sb.WriteString(fmt.Sprintf("- **%s** (composite score: %.2f, severity: %s)\n", chain.Name, chain.ChainScore, chain.Severity))
+			sb.WriteString(fmt.Sprintf("  MITRE techniques: %s\n", strings.Join(chain.Techniques, ", ")))
+			sb.WriteString(fmt.Sprintf("  Involves %d correlated deviations\n\n", len(chain.Deviations)))
+		}
 	}
 
 	sb.WriteString(`Analyze these deviations and respond with a JSON object:
@@ -193,7 +213,11 @@ func buildPrompt(req triage.TriageRequest) string {
   "mitre_mappings": ["T1195.001", ...],
   "severity": "low" | "medium" | "high" | "critical",
   "recommended_action": "what the security team should do"
-}`)
+}
+
+The deviations above have been pre-mapped to MITRE ATT&CK techniques where applicable.
+Please confirm, adjust, or add to the pre-mapped techniques in your mitre_mappings response.
+If a deviation was detected via static rules only (no baseline context), factor that into your confidence — static-only detections may have higher false positive rates.`)
 
 	return sb.String()
 }

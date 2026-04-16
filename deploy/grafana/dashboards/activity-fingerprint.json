@@ -114,55 +114,102 @@
     },
     {
       "id": 10,
-      "title": "Baseline Status",
-      "type": "stat",
+      "title": "Baseline Status per Repository",
+      "description": "Shows whether each repository/job is in learning mode or active detection mode",
+      "type": "table",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 4 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_baseline_jobs_observed{repository=~\"$repository\", job_name=~\"$job_name\"}",
-          "legendFormat": "{{job_name}}"
+          "expr": "max by(repository, job_name) (philip_baseline_status{repository=~\"$repository\", job_name=~\"$job_name\", status=\"active\"}) or max by(repository, job_name) (philip_baseline_status{repository=~\"$repository\", job_name=~\"$job_name\", status=\"learning\"} * 0)",
+          "format": "table",
+          "instant": true,
+          "refId": "Mode"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max by(repository, job_name) (philip_baseline_jobs_observed{repository=~\"$repository\", job_name=~\"$job_name\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "JobsObserved"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max by(repository, job_name) (philip_baseline_process_profiles{repository=~\"$repository\", job_name=~\"$job_name\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "Processes"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max by(repository, job_name) (philip_baseline_network_profiles{repository=~\"$repository\", job_name=~\"$job_name\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "Network"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max by(repository, job_name) (philip_baseline_file_access_profiles{repository=~\"$repository\", job_name=~\"$job_name\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "Files"
+        }
+      ],
+      "transformations": [
+        { "id": "merge" },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "repository": "Repository",
+              "job_name": "Job",
+              "Value #Mode": "Mode",
+              "Value #JobsObserved": "Jobs Observed",
+              "Value #Processes": "Process Profiles",
+              "Value #Network": "Network Profiles",
+              "Value #Files": "File Profiles"
+            },
+            "indexByName": {
+              "Repository": 0,
+              "Job": 1,
+              "Mode": 2,
+              "Jobs Observed": 3,
+              "Process Profiles": 4,
+              "Network Profiles": 5,
+              "File Profiles": 6
+            }
+          }
         }
       ],
       "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "yellow", "value": null },
-              { "color": "green", "value": 10 }
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Mode" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "0": { "text": "LEARNING", "color": "yellow", "index": 0 } } },
+                  { "type": "value", "options": { "1": { "text": "ACTIVE", "color": "green", "index": 1 } } }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": { "type": "color-text" }
+              }
             ]
           }
-        }
+        ]
       },
-      "options": { "graphMode": "none" }
-    },
-    {
-      "id": 11,
-      "title": "Baseline",
-      "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_baseline_status{repository=~\"$repository\", job_name=~\"$job_name\"} == 1",
-          "legendFormat": "{{status}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            { "type": "value", "options": { "1": { "text": "active", "color": "green" } } }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "yellow", "value": null }]
-          }
-        }
-      },
-      "options": { "graphMode": "none" }
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "Repository", "desc": false }]
+      }
     },
     {
       "id": 5,
@@ -170,46 +217,46 @@
       "description": "Each job execution with score, verdict, and event details",
       "type": "table",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 10 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_exec_timestamp_seconds{repository=~\"$repository\", job_name=~\"$job_name\"} * 1000",
+          "expr": "max by(repository, job_name, job_id, run_id) (philip_job_exec_timestamp_seconds{repository=~\"$repository\", job_name=~\"$job_name\"}) * 1000",
           "format": "table",
           "instant": true,
           "refId": "Timestamp"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_exec_score{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "max by(repository, job_name, job_id, run_id) (philip_job_exec_score{repository=~\"$repository\", job_name=~\"$job_name\"})",
           "format": "table",
           "instant": true,
           "refId": "Score"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_exec_verdict{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "max by(repository, job_name, job_id, run_id) (philip_job_exec_verdict{repository=~\"$repository\", job_name=~\"$job_name\"})",
           "format": "table",
           "instant": true,
           "refId": "Verdict"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_exec_event_count{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "max by(repository, job_name, job_id, run_id) (philip_job_exec_event_count{repository=~\"$repository\", job_name=~\"$job_name\"})",
           "format": "table",
           "instant": true,
           "refId": "Events"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_exec_deviation_count{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "max by(repository, job_name, job_id, run_id) (philip_job_exec_deviation_count{repository=~\"$repository\", job_name=~\"$job_name\"})",
           "format": "table",
           "instant": true,
           "refId": "Deviations"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "philip_job_exec_severity{repository=~\"$repository\", job_name=~\"$job_name\"}",
+          "expr": "max by(repository, job_name, job_id, run_id) (philip_job_exec_severity{repository=~\"$repository\", job_name=~\"$job_name\"})",
           "format": "table",
           "instant": true,
           "refId": "Severity"
@@ -374,7 +421,7 @@
       "description": "Max deviation score per execution over time",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -405,7 +452,7 @@
       "title": "Deviation Rate by Type",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -446,7 +493,7 @@
       "title": "Verdicts Over Time",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
@@ -481,7 +528,7 @@
       "title": "Score Distribution",
       "type": "heatmap",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },

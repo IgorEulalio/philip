@@ -127,20 +127,5 @@ func verdictStr(resp *TriageResponse) string {
 }
 
 func severityFromDeviations(deviations []detection.ScoredDeviation) string {
-	maxScore := 0.0
-	for _, d := range deviations {
-		if d.Score > maxScore {
-			maxScore = d.Score
-		}
-	}
-	switch {
-	case maxScore >= 0.9:
-		return "critical"
-	case maxScore >= 0.7:
-		return "high"
-	case maxScore >= 0.4:
-		return "medium"
-	default:
-		return "low"
-	}
+	return detection.SeverityFromChains(deviations, nil)
 }

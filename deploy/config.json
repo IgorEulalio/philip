@@ -1,0 +1,20 @@
+{
+  "grpc_address": ":9090",
+  "rest_address": ":8080",
+  "db": {
+    "host": "postgres",
+    "port": 5432,
+    "user": "philip",
+    "password": "philip",
+    "db_name": "philip",
+    "ssl_mode": "disable"
+  },
+  "detection": {
+    "baseline": {
+      "learning_threshold": 10,
+      "max_profile_age_days": 90
+    }
+  },
+  "openai_model": "gpt-4o",
+  "log_level": "info"
+}

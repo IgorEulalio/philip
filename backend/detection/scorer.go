@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"strings"
 
 	"github.com/IgorEulalio/philip/agent/sensor"
@@ -38,10 +39,14 @@ var deviationWeights = map[DeviationType]float64{
 
 // ScoredDeviation represents an event that deviates from the baseline.
 type ScoredDeviation struct {
-	Event         sensor.Event
-	Score         float64
-	DeviationType DeviationType
-	Description   string
+	Event             sensor.Event
+	Score             float64
+	DeviationType     DeviationType
+	Description       string
+	MITRETechniques   []string          `json:"mitre_techniques,omitempty"`
+	SuggestedSeverity string            `json:"suggested_severity,omitempty"`
+	StaticOnly        bool              `json:"static_only,omitempty"`
+	Metadata          map[string]string `json:"metadata,omitempty"`
 }
 
 // Scorer compares job events against a repository baseline and scores deviations.
@@ -56,16 +61,105 @@ func NewScorer(logger *slog.Logger) *Scorer {
 
 // ScoreJob scores all events in a job against the given baseline.
 // Returns only events that deviate from the baseline.
+// During learning mode, only static rules are applied (known-bad patterns).
 func (s *Scorer) ScoreJob(bl *baseline.RepositoryBaseline, events []sensor.Event) []ScoredDeviation {
-	if bl == nil || bl.IsLearning() {
-		return nil // No scoring during learning mode
+	if bl == nil {
+		return nil
 	}
 
 	var deviations []ScoredDeviation
 
-	for _, evt := range events {
-		devs := s.scoreEvent(bl, evt)
-		deviations = append(deviations, devs...)
+	if bl.IsLearning() {
+		// Static-only detection: catch known-bad patterns even without a trained baseline
+		for _, evt := range events {
+			devs := s.scoreEventStatic(evt)
+			deviations = append(deviations, devs...)
+		}
+	} else {
+		// Full baseline-aware scoring
+		for _, evt := range events {
+			devs := s.scoreEvent(bl, evt)
+			deviations = append(deviations, devs...)
+		}
+	}
+
+	if len(deviations) > 0 {
+		// Log deviation breakdown for debugging
+		typeCounts := make(map[DeviationType]int)
+		for _, d := range deviations {
+			typeCounts[d.DeviationType]++
+		}
+		s.logger.Debug("deviation breakdown",
+			"total", len(deviations),
+			"by_type", typeCounts)
+	}
+
+	return deviations
+}
+
+// scoreEventStatic applies only static detection rules (no baseline comparison).
+// Used during the learning phase to catch known-bad patterns like reverse shells,
+// credential access, and suspicious argument patterns.
+func (s *Scorer) scoreEventStatic(evt sensor.Event) []ScoredDeviation {
+	var deviations []ScoredDeviation
+
+	switch evt.Type {
+	case sensor.EventTypeProcessExec:
+		// Check for suspicious binaries
+		if isSuspiciousBinary(evt.Binary) {
+			deviations = append(deviations, ScoredDeviation{
+				Event:         evt,
+				Score:         1.0,
+				DeviationType: DeviationNewProcess,
+				Description:   fmt.Sprintf("Suspicious binary detected (static rule): %s", evt.Binary),
+				StaticOnly:    true,
+			})
+		}
+
+		// Check for suspicious argument patterns
+		if match, desc := matchSuspiciousArgRules(evt.Binary, evt.Args); match {
+			deviations = append(deviations, ScoredDeviation{
+				Event:         evt,
+				Score:         deviationWeights[DeviationSuspiciousArgs],
+				DeviationType: DeviationSuspiciousArgs,
+				Description:   desc + " (static rule)",
+				StaticOnly:    true,
+			})
+		}
+
+		// Check for high-risk parent→child combos
+		if evt.ParentBinary != "" && isHighRiskParentCombo(evt.ParentBinary, evt.Binary) {
+			deviations = append(deviations, ScoredDeviation{
+				Event:         evt,
+				Score:         1.0,
+				DeviationType: DeviationUnexpectedParent,
+				Description: fmt.Sprintf(
+					"High-risk process chain (static rule): %s → %s",
+					evt.ParentBinary, evt.Binary,
+				),
+				StaticOnly: true,
+			})
+		}
+
+	case sensor.EventTypeFileAccess:
+		// Check for sensitive path access
+		if isSensitivePath(evt.FilePath) {
+			deviations = append(deviations, ScoredDeviation{
+				Event:         evt,
+				Score:         deviationWeights[DeviationSensitivePath],
+				DeviationType: DeviationSensitivePath,
+				Description: fmt.Sprintf(
+					"Access to sensitive path (static rule): %s by %s",
+					evt.FilePath, evt.Binary,
+				),
+				StaticOnly: true,
+			})
+		}
+	}
+
+	// Enrich static deviations with MITRE mappings and severity
+	for i := range deviations {
+		enrichDeviation(&deviations[i])
 	}
 
 	return deviations
@@ -86,6 +180,11 @@ func (s *Scorer) scoreEvent(bl *baseline.RepositoryBaseline, evt sensor.Event) [
 	case sensor.EventTypeFileAccess:
 		devs := s.scoreFileAccess(bl, evt)
 		deviations = append(deviations, devs...)
+	}
+
+	// Enrich all deviations with MITRE mappings and severity
+	for i := range deviations {
+		enrichDeviation(&deviations[i])
 	}
 
 	return deviations
@@ -131,6 +230,10 @@ func (s *Scorer) scoreProcessExec(bl *baseline.RepositoryBaseline, evt sensor.Ev
 	argDevs := s.scoreProcessArgs(bl, evt)
 	deviations = append(deviations, argDevs...)
 
+	// Score anomalous args (statistical — based on baseline arg signatures)
+	anomalousDevs := s.scoreAnomalousArgs(bl, evt)
+	deviations = append(deviations, anomalousDevs...)
+
 	// Score unexpected parent process
 	parentDevs := s.scoreProcessParent(bl, evt)
 	deviations = append(deviations, parentDevs...)
@@ -157,6 +260,53 @@ func (s *Scorer) scoreProcessArgs(_ *baseline.RepositoryBaseline, evt sensor.Eve
 	return deviations
 }
 
+// scoreAnomalousArgs detects when a known binary is invoked with an argument
+// pattern never seen in the baseline.
+func (s *Scorer) scoreAnomalousArgs(bl *baseline.RepositoryBaseline, evt sensor.Event) []ScoredDeviation {
+	// Only score anomalous args once baseline has enough observations
+	// to have meaningful arg signature data
+	if bl.TotalJobsObserved < 5 {
+		return nil
+	}
+
+	profile := bl.FindProcessProfile(evt.Binary)
+	if profile == nil || len(profile.ArgSignatures) == 0 {
+		return nil // No arg baseline data
+	}
+
+	argPattern := baseline.NormalizeArgs(evt.Binary, evt.Args)
+	if argPattern == "" {
+		return nil
+	}
+
+	sig := profile.FindArgSignature(argPattern)
+	if sig == nil {
+		// Never-seen arg pattern for a known binary
+		return []ScoredDeviation{{
+			Event:         evt,
+			Score:         deviationWeights[DeviationAnomalousArgs],
+			DeviationType: DeviationAnomalousArgs,
+			Description: fmt.Sprintf(
+				"Known binary %s invoked with unseen argument pattern: %s",
+				evt.Binary, argPattern,
+			),
+		}}
+	} else if sig.Frequency < 0.05 {
+		// Rare arg pattern — lower score
+		return []ScoredDeviation{{
+			Event:         evt,
+			Score:         deviationWeights[DeviationAnomalousArgs] * 0.6,
+			DeviationType: DeviationAnomalousArgs,
+			Description: fmt.Sprintf(
+				"Known binary %s with rare argument pattern (freq: %.2f%%): %s",
+				evt.Binary, sig.Frequency*100, argPattern,
+			),
+		}}
+	}
+
+	return nil
+}
+
 // scoreProcessParent detects when a process is spawned by an unexpected parent.
 func (s *Scorer) scoreProcessParent(bl *baseline.RepositoryBaseline, evt sensor.Event) []ScoredDeviation {
 	if evt.ParentBinary == "" {
@@ -166,6 +316,12 @@ func (s *Scorer) scoreProcessParent(bl *baseline.RepositoryBaseline, evt sensor.
 	profile := bl.FindProcessProfile(evt.Binary)
 	if profile == nil || len(profile.KnownParents) == 0 {
 		return nil // Not enough baseline data
+	}
+
+	// Only flag unexpected parents after sufficient observations —
+	// parent sets are sparse in early jobs.
+	if profile.ObservedCount < 3 {
+		return nil
 	}
 
 	// Check if this parent is known
@@ -215,6 +371,35 @@ func (s *Scorer) applyStepModifier(profile *baseline.ProcessProfile, evt sensor.
 	}
 }
 
+// trustedDomainSuffixes are domains commonly used by package registries
+// and CI/CD services. Connections to these reduce network deviation scores.
+var trustedDomainSuffixes = map[string]bool{
+	"github.com":       true,
+	"githubusercontent.com": true,
+	"npmjs.org":        true,
+	"npmjs.com":        true,
+	"yarnpkg.com":      true,
+	"pypi.org":         true,
+	"pythonhosted.org": true,
+	"rubygems.org":     true,
+	"crates.io":        true,
+	"docker.io":        true,
+	"docker.com":       true,
+	"gcr.io":           true,
+	"amazonaws.com":    true,
+	"cloudfront.net":   true,
+	"googleapis.com":   true,
+	"registry.npmjs.org": true,
+	"gitlab.com":       true,
+	"bitbucket.org":    true,
+	"nuget.org":        true,
+	"maven.org":        true,
+	"gradle.org":       true,
+	"golang.org":       true,
+	"proxy.golang.org": true,
+	"sum.golang.org":   true,
+}
+
 func (s *Scorer) scoreNetworkConnect(bl *baseline.RepositoryBaseline, evt sensor.Event) []ScoredDeviation {
 	var deviations []ScoredDeviation
 
@@ -234,6 +419,12 @@ func (s *Scorer) scoreNetworkConnect(bl *baseline.RepositoryBaseline, evt sensor
 			score = 1.0
 		}
 
+		// Check if any nearby baseline profile resolves to a trusted domain
+		// that could cover this IP (e.g., CDN/load balancer changes)
+		if isTrustedDomain := checkTrustedDomainForIP(bl, destIP); isTrustedDomain {
+			score *= 0.5 // Reduce score by 50% for trusted domains
+		}
+
 		deviations = append(deviations, ScoredDeviation{
 			Event:         evt,
 			Score:         score,
@@ -245,9 +436,14 @@ func (s *Scorer) scoreNetworkConnect(bl *baseline.RepositoryBaseline, evt sensor
 		})
 	} else if !containsPort(profile.TypicalPorts, uint32(evt.DestPort)) {
 		// Known IP but unusual port
+		score := deviationWeights[DeviationNewNetwork] * 0.6
+		// Reduce for trusted domains
+		if profile.DomainSuffix != "" && trustedDomainSuffixes[profile.DomainSuffix] {
+			score *= 0.5
+		}
 		deviations = append(deviations, ScoredDeviation{
 			Event:         evt,
-			Score:         deviationWeights[DeviationNewNetwork] * 0.6,
+			Score:         score,
 			DeviationType: DeviationNewNetwork,
 			Description: fmt.Sprintf(
 				"Known destination %s but unusual port %d (typical: %v)",
@@ -259,9 +455,32 @@ func (s *Scorer) scoreNetworkConnect(bl *baseline.RepositoryBaseline, evt sensor
 	return deviations
 }
 
+// checkTrustedDomainForIP does a best-effort reverse DNS lookup on the IP
+// and checks if it resolves to a trusted domain suffix.
+func checkTrustedDomainForIP(bl *baseline.RepositoryBaseline, ip string) bool {
+	// First check if any existing profile with the same domain suffix is trusted
+	// (avoids DNS lookup if we already know the domain from the baseline)
+	names, err := net.LookupAddr(ip)
+	if err != nil || len(names) == 0 {
+		return false
+	}
+	for _, name := range names {
+		name = strings.TrimSuffix(name, ".")
+		parts := strings.Split(name, ".")
+		if len(parts) >= 2 {
+			suffix := strings.Join(parts[len(parts)-2:], ".")
+			if trustedDomainSuffixes[suffix] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (s *Scorer) scoreFileAccess(bl *baseline.RepositoryBaseline, evt sensor.Event) []ScoredDeviation {
 	var deviations []ScoredDeviation
 
+	// Static check: always flag sensitive paths regardless of baseline
 	if isSensitivePath(evt.FilePath) {
 		deviations = append(deviations, ScoredDeviation{
 			Event:         evt,
@@ -274,7 +493,69 @@ func (s *Scorer) scoreFileAccess(bl *baseline.RepositoryBaseline, evt sensor.Eve
 		})
 	}
 
+	// Baseline-aware file access scoring — only if baseline has learned file patterns
+	if len(bl.FileAccessProfiles) == 0 {
+		return deviations // No file profiles learned yet, skip baseline comparison
+	}
+
+	pattern := baseline.NormalizePathPattern(evt.FilePath)
+	if pattern == "" {
+		return deviations
+	}
+
+	profile := bl.FindFileAccessProfile(pattern)
+	if profile == nil {
+		// New path pattern never seen in baseline
+		score := deviationWeights[DeviationNewFile]
+		// Boost for write/create operations on new paths
+		if evt.AccessType == "write" || evt.AccessType == "create" {
+			score = 0.6
+		}
+		deviations = append(deviations, ScoredDeviation{
+			Event:         evt,
+			Score:         score,
+			DeviationType: DeviationNewFile,
+			Description: fmt.Sprintf(
+				"New file access pattern: %s by %s (access: %s)",
+				evt.FilePath, evt.Binary, evt.AccessType,
+			),
+		})
+	} else {
+		// Known pattern — check for new access type or new binary
+		if evt.AccessType != "" && !containsString(profile.AccessTypes, evt.AccessType) {
+			deviations = append(deviations, ScoredDeviation{
+				Event:         evt,
+				Score:         0.5,
+				DeviationType: DeviationNewFile,
+				Description: fmt.Sprintf(
+					"New access type '%s' on known path pattern %s by %s (known types: %v)",
+					evt.AccessType, pattern, evt.Binary, profile.AccessTypes,
+				),
+			})
+		}
+		if evt.Binary != "" && !containsString(profile.BinaryPaths, evt.Binary) {
+			deviations = append(deviations, ScoredDeviation{
+				Event:         evt,
+				Score:         0.4,
+				DeviationType: DeviationNewFile,
+				Description: fmt.Sprintf(
+					"New binary '%s' accessing known path pattern %s (known binaries: %v)",
+					evt.Binary, pattern, profile.BinaryPaths,
+				),
+			})
+		}
+	}
+
 	return deviations
+}
+
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // matchSuspiciousArgRules checks for known-dangerous argument patterns.
@@ -452,4 +733,10 @@ func containsStr(s, substr string) bool {
 
 func hasSuffix(s, suffix string) bool {
 	return strings.HasSuffix(s, suffix)
+}
+
+// enrichDeviation populates MITRE techniques and suggested severity.
+func enrichDeviation(d *ScoredDeviation) {
+	d.MITRETechniques = MITREForDeviation(*d)
+	d.SuggestedSeverity = SuggestSeverity(d.Score)
 }

@@ -24,6 +24,7 @@ type StoreInterface interface {
 
 	// Baselines
 	GetBaseline(ctx context.Context, repository, workflowFile, jobName string) (*BaselineRecord, error)
+	ListBaselines(ctx context.Context) ([]BaselineSummary, error)
 	UpsertBaseline(ctx context.Context, b *BaselineRecord) error
 
 	// Findings

