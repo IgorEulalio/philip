@@ -177,78 +177,75 @@
           "expr": "philip_job_exec_timestamp_seconds{repository=~\"$repository\", job_name=~\"$job_name\"} * 1000",
           "format": "table",
           "instant": true,
-          "refId": "A"
+          "refId": "Timestamp"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_job_exec_score{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
-          "refId": "B"
+          "refId": "Score"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_job_exec_verdict{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
-          "refId": "C"
+          "refId": "Verdict"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_job_exec_event_count{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
-          "refId": "D"
+          "refId": "Events"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_job_exec_deviation_count{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
-          "refId": "E"
+          "refId": "Deviations"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "philip_job_exec_severity{repository=~\"$repository\", job_name=~\"$job_name\"}",
           "format": "table",
           "instant": true,
-          "refId": "F"
+          "refId": "Severity"
         }
       ],
       "transformations": [
         {
-          "id": "filterFieldsByName",
-          "options": {
-            "include": {
-              "pattern": "^(job_id|run_id|repository|job_name|Value.*)$"
-            }
-          }
+          "id": "merge"
         },
-        { "id": "merge" },
         {
           "id": "organize",
           "options": {
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
             "indexByName": {
               "job_id": 0,
-              "repository": 1,
-              "job_name": 2,
-              "Value #A": 3,
-              "Value #B": 4,
-              "Value #C": 5,
-              "Value #D": 6,
-              "Value #E": 7,
-              "Value #F": 8
+              "run_id": 1,
+              "repository": 2,
+              "job_name": 3,
+              "Value #Timestamp": 4,
+              "Value #Score": 5,
+              "Value #Verdict": 6,
+              "Value #Events": 7,
+              "Value #Deviations": 8,
+              "Value #Severity": 9
             },
             "renameByName": {
               "job_id": "Job ID",
+              "run_id": "Run ID",
               "repository": "Repository",
               "job_name": "Job",
-              "Value #A": "Timestamp",
-              "Value #B": "Score",
-              "Value #C": "Verdict",
-              "Value #D": "Events",
-              "Value #E": "Deviations",
-              "Value #F": "Severity"
+              "Value #Timestamp": "Timestamp",
+              "Value #Score": "Score",
+              "Value #Verdict": "Verdict",
+              "Value #Events": "Events",
+              "Value #Deviations": "Deviations",
+              "Value #Severity": "Severity"
             }
           }
         },
@@ -269,7 +266,7 @@
                 "value": [
                   {
                     "title": "View on GitHub",
-                    "url": "https://github.com/${__data.fields.Repository}/actions/runs/${__data.fields.run_id}",
+                    "url": "https://github.com/${__data.fields.Repository}/actions/runs/${__data.fields[\"Run ID\"]}",
                     "targetBlank": true
                   }
                 ]
@@ -277,7 +274,7 @@
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "run_id" },
+            "matcher": { "id": "byName", "options": "Run ID" },
             "properties": [
               { "id": "custom.hidden", "value": true }
             ]
